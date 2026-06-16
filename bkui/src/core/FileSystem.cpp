@@ -1,4 +1,4 @@
-#include <bkui/resource/FileSystem.hpp>
+#include <bkui/core/FileSystem.hpp>
 
 #include <cstddef>
 #include <fstream>

@@ -4,13 +4,11 @@ option(BKUI_USE_PHYSFS "Use PhysicsFS for the virtual file system" ON)
 set(BKUI_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/platform")
 
 file(
-    GLOB_RECURSE
+    GLOB
     BKUI_SRC
     CONFIGURE_DEPENDS
     src/core/*.cpp
-    src/renderer/*.cpp
-    src/resource/*.cpp
-    src/rhi/*.cpp
+    src/render/*.cpp
     src/ui/*.cpp
 )
 
@@ -22,7 +20,7 @@ if(BKUI_PLATFORM_SWITCH)
         src/platform/switch/*.cpp
     )
     list(APPEND BKUI_SRC ${BKUI_PLATFORM_SRC})
-    list(APPEND BKUI_SRC src/backend/deko3d/Deko3DDevice.cpp)
+    list(APPEND BKUI_SRC src/render/backend/deko3d/Deko3DDevice.cpp)
 else()
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
@@ -39,7 +37,7 @@ else()
         src/platform/sdl/*.cpp
     )
     list(APPEND BKUI_SRC ${BKUI_PLATFORM_SRC})
-    list(APPEND BKUI_SRC src/backend/opengl/OpenGLDevice.cpp)
+    list(APPEND BKUI_SRC src/render/backend/opengl/OpenGLDevice.cpp)
 endif()
 
 if(BKUI_USE_PHYSFS AND NOT BKUI_PLATFORM_SWITCH)

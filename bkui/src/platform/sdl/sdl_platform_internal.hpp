@@ -1,7 +1,7 @@
 #pragma once
 
 #include <bkui/platform/Platform.hpp>
-#include <bkui/resource/FileSystem.hpp>
+#include <bkui/core/FileSystem.hpp>
 
 #include <SDL3/SDL.h>
 #include <vector>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <bkui/platform/Platform.hpp>
-#include <bkui/rhi/Device.hpp>
+#include <bkui/render/Device.hpp>
 
 #include <memory>
 

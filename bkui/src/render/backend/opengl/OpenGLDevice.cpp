@@ -1,4 +1,4 @@
-#include <bkui/backend/opengl/OpenGLDevice.hpp>
+#include <bkui/render/backend/opengl/OpenGLDevice.hpp>
 
 #include <SDL3/SDL_opengl.h>
 

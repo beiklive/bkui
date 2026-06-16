@@ -1,5 +1,5 @@
-#include <bkui/backend/deko3d/Deko3DDevice.hpp>
-#include <bkui/resource/FileSystem.hpp>
+#include <bkui/render/backend/deko3d/Deko3DDevice.hpp>
+#include <bkui/core/FileSystem.hpp>
 
 #include <deko3d.hpp>
 #include <switch.h>

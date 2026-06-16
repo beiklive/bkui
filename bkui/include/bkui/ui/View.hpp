@@ -1,7 +1,7 @@
 #pragma once
 
 #include <bkui/core/Types.hpp>
-#include <bkui/renderer/RenderQueue.hpp>
+#include <bkui/render/RenderQueue.hpp>
 
 #include <memory>
 #include <vector>
