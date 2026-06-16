@@ -8,3 +8,8 @@
 #include <bkui/platform/Platform.hpp>
 #include <bkui/resource/FileSystem.hpp>
 #include <bkui/rhi/Device.hpp>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+#define STB_TRUETYPE_IMPLEMENTATION
+#include <stb_truetype.h>
