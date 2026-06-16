@@ -24,14 +24,28 @@ public:
     /// 获取子项之间的间距。
     [[nodiscard]] float GetSpacing() const;
 
+    /// 设置背景颜色。
+    void SetBackgroundColor(const Color& color);
+    /// 获取背景颜色。
+    [[nodiscard]] const Color& GetBackgroundColor() const;
+
+    /// 控制是否绘制背景。
+    void SetDrawBackground(bool enabled);
+    /// 查询当前是否绘制背景。
+    [[nodiscard]] bool IsBackgroundEnabled() const;
+
     /// 计算容器所需尺寸。
     Size Measure(const Size& available) const override;
     /// 按方向和间距布置全部子项。
     void Layout() override;
 
 protected:
+    void DrawSelf(RenderQueue& queue) const override;
+
     BoxDirection direction_;
     float spacing_ = 0.0F;
+    Color backgroundColor_{0.0F, 0.0F, 0.0F, 0.0F};
+    bool drawBackground_ = false;
 };
 
 class HBox final : public Box

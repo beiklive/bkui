@@ -7,13 +7,17 @@ namespace bk
 {
 
 Button::Button(std::string text)
-    : text_(std::move(text))
+    : Box(BoxDirection::Vertical)
+    , text_(std::move(text))
 {
+    SetDrawBackground(true);
+    SetBackgroundColor(Color{0.18F, 0.45F, 0.90F, 1.0F});
 }
 
 void Button::SetText(std::string text)
 {
     text_ = std::move(text);
+    InvalidateLayout();
 }
 
 const std::string& Button::GetText() const
@@ -23,12 +27,12 @@ const std::string& Button::GetText() const
 
 void Button::SetBackgroundColor(const Color& color)
 {
-    backgroundColor_ = color;
+    Box::SetBackgroundColor(color);
 }
 
 const Color& Button::GetBackgroundColor() const
 {
-    return backgroundColor_;
+    return Box::GetBackgroundColor();
 }
 
 void Button::SetTextColor(const Color& color)
@@ -41,16 +45,27 @@ const Color& Button::GetTextColor() const
     return textColor_;
 }
 
+void Button::SetFontSize(float fontSize)
+{
+    fontSize_ = fontSize;
+    InvalidateLayout();
+}
+
+float Button::GetFontSize() const
+{
+    return fontSize_;
+}
+
 Size Button::Measure(const Size& available) const
 {
-    const float estimatedWidth = std::min(available.width, static_cast<float>(text_.size()) * 12.0F + 36.0F);
-    const float estimatedHeight = std::min(available.height, 44.0F);
+    const float estimatedWidth = std::min(available.width, static_cast<float>(text_.size()) * (fontSize_ * 0.66F) + 36.0F);
+    const float estimatedHeight = std::min(available.height, std::max(44.0F, fontSize_ * 1.8F));
     return Size{estimatedWidth, estimatedHeight};
 }
 
-void Button::Render(RenderQueue& queue) const
+void Button::DrawSelf(RenderQueue& queue) const
 {
-    queue.PushRect(frame_, backgroundColor_);
+    Box::DrawSelf(queue);
     queue.PushText(
         Rect{
             frame_.x + 12.0F,
@@ -59,9 +74,8 @@ void Button::Render(RenderQueue& queue) const
             std::max(0.0F, frame_.height - 20.0F),
         },
         text_,
-        18.0F,
+        fontSize_,
         textColor_);
-    View::Render(queue);
 }
 
 }

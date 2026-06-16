@@ -7,13 +7,15 @@ namespace bk
 {
 
 Label::Label(std::string text)
-    : text_(std::move(text))
+    : Box(BoxDirection::Vertical)
+    , text_(std::move(text))
 {
 }
 
 void Label::SetText(std::string text)
 {
     text_ = std::move(text);
+    InvalidateLayout();
 }
 
 const std::string& Label::GetText() const
@@ -48,10 +50,10 @@ Size Label::Measure(const Size& available) const
     return Size{estimatedWidth, estimatedHeight};
 }
 
-void Label::Render(RenderQueue& queue) const
+void Label::DrawSelf(RenderQueue& queue) const
 {
+    Box::DrawSelf(queue);
     queue.PushText(frame_, text_, fontSize_, textColor_);
-    View::Render(queue);
 }
 
 }

@@ -13,11 +13,32 @@ Box::Box(BoxDirection direction)
 void Box::SetSpacing(float spacing)
 {
     spacing_ = spacing;
+    InvalidateLayout();
 }
 
 float Box::GetSpacing() const
 {
     return spacing_;
+}
+
+void Box::SetBackgroundColor(const Color& color)
+{
+    backgroundColor_ = color;
+}
+
+const Color& Box::GetBackgroundColor() const
+{
+    return backgroundColor_;
+}
+
+void Box::SetDrawBackground(bool enabled)
+{
+    drawBackground_ = enabled;
+}
+
+bool Box::IsBackgroundEnabled() const
+{
+    return drawBackground_;
 }
 
 Size Box::Measure(const Size& available) const
@@ -27,7 +48,7 @@ Size Box::Measure(const Size& available) const
 
     for (const auto& child : children_)
     {
-        if (!child)
+        if (!child || !child->IsVisible())
         {
             continue;
         }
@@ -59,11 +80,12 @@ Size Box::Measure(const Size& available) const
 
 void Box::Layout()
 {
+    needsLayout_ = false;
     float cursor = direction_ == BoxDirection::Horizontal ? frame_.x : frame_.y;
 
     for (const auto& child : children_)
     {
-        if (!child)
+        if (!child || !child->IsVisible())
         {
             continue;
         }
@@ -81,6 +103,14 @@ void Box::Layout()
         }
 
         child->Layout();
+    }
+}
+
+void Box::DrawSelf(RenderQueue& queue) const
+{
+    if (drawBackground_ && frame_.width > 0.0F && frame_.height > 0.0F)
+    {
+        queue.PushRect(frame_, backgroundColor_);
     }
 }
 

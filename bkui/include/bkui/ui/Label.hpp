@@ -1,6 +1,6 @@
 #pragma once
 
-#include <bkui/ui/View.hpp>
+#include <bkui/ui/Box.hpp>
 
 #include <string>
 
@@ -8,7 +8,7 @@ namespace bk
 {
 
 /// 纯文本显示控件。
-class Label final : public View
+class Label final : public Box
 {
 public:
     /// 使用初始文本创建标签。
@@ -32,7 +32,7 @@ public:
     /// 估算标签占用尺寸。
     Size Measure(const Size& available) const override;
     /// 生成标签对应的文本绘制命令。
-    void Render(RenderQueue& queue) const override;
+    void DrawSelf(RenderQueue& queue) const override;
 
 private:
     std::string text_;
