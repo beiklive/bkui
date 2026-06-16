@@ -6,6 +6,7 @@
 namespace bk
 {
 
+/// 软键盘禁用字符的位掩码定义。
 enum KeyboardKeyDisableBitmask
 {
     KEYBOARD_DISABLE_NONE = 0,
@@ -24,6 +25,7 @@ class ImeManager
 public:
     virtual ~ImeManager() = default;
 
+    /// 打开文本输入界面，并在用户确认后回调输入结果。
     virtual bool OpenForText(
         std::function<void(std::string)> callback,
         std::string headerText = "",
@@ -32,6 +34,7 @@ public:
         std::string initialText = "",
         int kbdDisableBitmask = KeyboardKeyDisableBitmask::KEYBOARD_DISABLE_NONE) = 0;
 
+    /// 打开数字输入界面，并在用户确认后回调输入结果。
     virtual bool OpenForNumber(
         std::function<void(long)> callback,
         std::string headerText = "",

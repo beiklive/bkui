@@ -7,12 +7,14 @@
 namespace bk
 {
 
+/// 渲染命令类型。
 enum class RenderCommandType
 {
     Rect,
     Text,
 };
 
+/// 浮点矩形区域。
 struct Rect
 {
     float x = 0.0F;
@@ -21,6 +23,7 @@ struct Rect
     float height = 0.0F;
 };
 
+/// 提交给渲染阶段的简单绘制命令。
 struct RenderCommand
 {
     RenderCommandType type = RenderCommandType::Rect;
