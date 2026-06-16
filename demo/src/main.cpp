@@ -257,8 +257,10 @@ Image BuildShowcase()
     FillRect(canvas, 48, 48, 928, 544, 242, 246, 250, 255);
     FillRect(canvas, 64, 64, 896, 76, 36, 77, 122, 255);
 
-    DrawText(canvas, "fonts/font.ttf", U"BeikUI 资源渲染演示", 92, 82, 34.0F, 255, 255, 255);
-    DrawText(canvas, "fonts/font.ttf", U"中文字体 / PNG 图片 / SVG 图片", 92, 158, 26.0F, 32, 42, 55);
+
+
+    DrawText(canvas, "fonts/switch_font.ttf", U"BeikUI 资源渲染演示", 92, 82, 34.0F, 255, 255, 255);
+    DrawText(canvas, "fonts/switch_font.ttf", U"中文字体 / PNG 图片 / SVG 图片", 92, 158, 26.0F, 32, 42, 55);
 
     const Image png = LoadPng("images/beiklive.png");
     if (!png.pixels.empty())
