@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -18,10 +19,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#if defined(BKUI_PLATFORM_SWITCH)
-#include <switch.h>
-#endif
 
 namespace
 {
@@ -61,9 +58,23 @@ struct SvgShape
 
 struct FontResource
 {
-    bk::Buffer data;
-    stbtt_fontinfo info{};
-    bool valid = false;
+    struct Face
+    {
+        bk::Buffer data;
+        stbtt_fontinfo info{};
+    };
+
+    std::vector<Face> faces;
+
+    [[nodiscard]] bool Valid() const
+    {
+        return !faces.empty();
+    }
+
+    [[nodiscard]] const Face* PrimaryFace() const
+    {
+        return faces.empty() ? nullptr : &faces.front();
+    }
 };
 
 void PutPixel(Image& image, int x, int y, std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a = 255)
@@ -106,6 +117,43 @@ void FillRect(Image& image, int x, int y, int w, int h, std::uint8_t r, std::uin
     }
 }
 
+void FillCircle(Image& image, int cx, int cy, int radius, std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a = 255)
+{
+    const int radiusSquared = radius * radius;
+    for (int yy = -radius; yy <= radius; ++yy)
+    {
+        for (int xx = -radius; xx <= radius; ++xx)
+        {
+            if (xx * xx + yy * yy <= radiusSquared)
+            {
+                PutPixel(image, cx + xx, cy + yy, r, g, b, a);
+            }
+        }
+    }
+}
+
+Image MakeImage(int width, int height, std::uint8_t r = 0, std::uint8_t g = 0, std::uint8_t b = 0, std::uint8_t a = 0)
+{
+    Image image;
+    image.width = width;
+    image.height = height;
+    image.pixels.resize(static_cast<std::size_t>(width * height * 4), 0);
+    if (r == 0 && g == 0 && b == 0 && a == 0)
+    {
+        return image;
+    }
+
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            PutPixel(image, x, y, r, g, b, a);
+        }
+    }
+
+    return image;
+}
+
 void Blit(Image& dst, const Image& src, int x, int y, int w, int h)
 {
     for (int yy = 0; yy < h; ++yy)
@@ -125,6 +173,165 @@ void Blit(Image& dst, const Image& src, int x, int y, int w, int h)
             dst.pixels[di + 1] = static_cast<std::uint8_t>(sg * alpha + dst.pixels[di + 1] * (1.0F - alpha));
             dst.pixels[di + 2] = static_cast<std::uint8_t>(sb * alpha + dst.pixels[di + 2] * (1.0F - alpha));
             dst.pixels[di + 3] = 255;
+        }
+    }
+}
+
+std::array<Vertex, 6> MakeQuad(float left, float top, float right, float bottom)
+{
+    return {{
+        {{left,  top},    {1.0F, 1.0F, 1.0F}, {0.0F, 0.0F}},
+        {{left,  bottom}, {1.0F, 1.0F, 1.0F}, {0.0F, 1.0F}},
+        {{right, bottom}, {1.0F, 1.0F, 1.0F}, {1.0F, 1.0F}},
+        {{left,  top},    {1.0F, 1.0F, 1.0F}, {0.0F, 0.0F}},
+        {{right, bottom}, {1.0F, 1.0F, 1.0F}, {1.0F, 1.0F}},
+        {{right, top},    {1.0F, 1.0F, 1.0F}, {1.0F, 0.0F}},
+    }};
+}
+
+std::array<Vertex, 6> MakePixelQuad(int x, int y, int w, int h, int screenWidth, int screenHeight)
+{
+    const float left = static_cast<float>(x) / static_cast<float>(screenWidth) * 2.0F - 1.0F;
+    const float right = static_cast<float>(x + w) / static_cast<float>(screenWidth) * 2.0F - 1.0F;
+    const float top = 1.0F - static_cast<float>(y) / static_cast<float>(screenHeight) * 2.0F;
+    const float bottom = 1.0F - static_cast<float>(y + h) / static_cast<float>(screenHeight) * 2.0F;
+    return MakeQuad(left, top, right, bottom);
+}
+
+std::array<Vertex, 6> MakeRotatedPixelQuad(int cx, int cy, int w, int h, float angle, int screenWidth, int screenHeight)
+{
+    const float halfW = static_cast<float>(w) * 0.5F;
+    const float halfH = static_cast<float>(h) * 0.5F;
+    const float cosA = std::cos(angle);
+    const float sinA = std::sin(angle);
+
+    auto toNdc = [&](float px, float py) -> std::array<float, 2>
+    {
+        return {{
+            px / static_cast<float>(screenWidth) * 2.0F - 1.0F,
+            1.0F - py / static_cast<float>(screenHeight) * 2.0F,
+        }};
+    };
+
+    auto rotate = [&](float localX, float localY) -> std::array<float, 2>
+    {
+        return toNdc(
+            static_cast<float>(cx) + localX * cosA - localY * sinA,
+            static_cast<float>(cy) + localX * sinA + localY * cosA);
+    };
+
+    const auto p0 = rotate(-halfW, -halfH);
+    const auto p1 = rotate(-halfW, halfH);
+    const auto p2 = rotate(halfW, halfH);
+    const auto p3 = rotate(halfW, -halfH);
+
+    return {{
+        {{p0[0], p0[1]}, {1.0F, 1.0F, 1.0F}, {0.0F, 0.0F}},
+        {{p1[0], p1[1]}, {1.0F, 1.0F, 1.0F}, {0.0F, 1.0F}},
+        {{p2[0], p2[1]}, {1.0F, 1.0F, 1.0F}, {1.0F, 1.0F}},
+        {{p0[0], p0[1]}, {1.0F, 1.0F, 1.0F}, {0.0F, 0.0F}},
+        {{p2[0], p2[1]}, {1.0F, 1.0F, 1.0F}, {1.0F, 1.0F}},
+        {{p3[0], p3[1]}, {1.0F, 1.0F, 1.0F}, {1.0F, 0.0F}},
+    }};
+}
+
+void BlitCircle(Image& dst, const Image& src, int cx, int cy, int diameter)
+{
+    if (src.pixels.empty() || diameter <= 0)
+    {
+        return;
+    }
+
+    const int radius = diameter / 2;
+    const int radiusSquared = radius * radius;
+    const int left = cx - radius;
+    const int top = cy - radius;
+
+    for (int yy = 0; yy < diameter; ++yy)
+    {
+        for (int xx = 0; xx < diameter; ++xx)
+        {
+            const int dx = xx - radius;
+            const int dy = yy - radius;
+            if (dx * dx + dy * dy > radiusSquared)
+            {
+                continue;
+            }
+
+            const int sx = xx * src.width / diameter;
+            const int sy = yy * src.height / diameter;
+            const std::size_t si = static_cast<std::size_t>((sy * src.width + sx) * 4);
+            BlendPixel(
+                dst,
+                left + xx,
+                top + yy,
+                src.pixels[si + 0],
+                src.pixels[si + 1],
+                src.pixels[si + 2],
+                src.pixels[si + 3]);
+        }
+    }
+}
+
+void BlitTransformed(Image& dst, const Image& src, int x, int y, int w, int h, float angle, float scale)
+{
+    const float cx = x + w * 0.5F;
+    const float cy = y + h * 0.5F;
+    const float cos_a = std::cos(-angle);
+    const float sin_a = std::sin(-angle);
+    const float inv_scale = 1.0F / scale;
+    const float src_half_w = src.width * 0.5F;
+    const float src_half_h = src.height * 0.5F;
+
+    for (int yy = y; yy < y + h; ++yy)
+    {
+        for (int xx = x; xx < x + w; ++xx)
+        {
+            const float rel_x = (xx - cx) * inv_scale;
+            const float rel_y = (yy - cy) * inv_scale;
+            const float src_x = rel_x * cos_a - rel_y * sin_a + src_half_w;
+            const float src_y = rel_x * sin_a + rel_y * cos_a + src_half_h;
+
+            if (src_x < 0.0F || src_y < 0.0F || src_x >= static_cast<float>(src.width - 1) || src_y >= static_cast<float>(src.height - 1))
+            {
+                continue;
+            }
+
+            const int x0 = static_cast<int>(std::floor(src_x));
+            const int y0 = static_cast<int>(std::floor(src_y));
+            const int x1 = std::min(x0 + 1, src.width - 1);
+            const int y1 = std::min(y0 + 1, src.height - 1);
+            const float tx = src_x - static_cast<float>(x0);
+            const float ty = src_y - static_cast<float>(y0);
+
+            auto sample = [&](int sx, int sy, int channel) -> float
+            {
+                const std::size_t index = static_cast<std::size_t>((sy * src.width + sx) * 4 + channel);
+                return static_cast<float>(src.pixels[index]);
+            };
+
+            auto lerp = [](float a, float b, float t) -> float
+            {
+                return a + (b - a) * t;
+            };
+
+            const float sr0 = lerp(sample(x0, y0, 0), sample(x1, y0, 0), tx);
+            const float sr1 = lerp(sample(x0, y1, 0), sample(x1, y1, 0), tx);
+            const float sg0 = lerp(sample(x0, y0, 1), sample(x1, y0, 1), tx);
+            const float sg1 = lerp(sample(x0, y1, 1), sample(x1, y1, 1), tx);
+            const float sb0 = lerp(sample(x0, y0, 2), sample(x1, y0, 2), tx);
+            const float sb1 = lerp(sample(x0, y1, 2), sample(x1, y1, 2), tx);
+            const float sa0 = lerp(sample(x0, y0, 3), sample(x1, y0, 3), tx);
+            const float sa1 = lerp(sample(x0, y1, 3), sample(x1, y1, 3), tx);
+
+            BlendPixel(
+                dst,
+                xx,
+                yy,
+                static_cast<std::uint8_t>(lerp(sr0, sr1, ty)),
+                static_cast<std::uint8_t>(lerp(sg0, sg1, ty)),
+                static_cast<std::uint8_t>(lerp(sb0, sb1, ty)),
+                static_cast<std::uint8_t>(lerp(sa0, sa1, ty)));
         }
     }
 }
@@ -645,9 +852,29 @@ Image RasterizeSvg(const std::string& path, int size)
     const float scale = (static_cast<float>(size) - padding * 2.0F) / 1024.0F;
     for (const SvgShape& shape : shapes)
     {
-        for (int y = 0; y < size; ++y)
+        float svgMinX = std::numeric_limits<float>::max();
+        float svgMaxX = -std::numeric_limits<float>::max();
+        float svgMinY = std::numeric_limits<float>::max();
+        float svgMaxY = -std::numeric_limits<float>::max();
+        for (const auto& contour : shape.contours)
         {
-            for (int x = 0; x < size; ++x)
+            for (const auto& p : contour)
+            {
+                if (p.x < svgMinX) svgMinX = p.x;
+                if (p.x > svgMaxX) svgMaxX = p.x;
+                if (p.y < svgMinY) svgMinY = p.y;
+                if (p.y > svgMaxY) svgMaxY = p.y;
+            }
+        }
+
+        const int pxMinX = std::max(0, static_cast<int>(std::floor(svgMinX * scale + padding - 1.0F)));
+        const int pxMaxX = std::min(size - 1, static_cast<int>(std::ceil(svgMaxX * scale + padding + 1.0F)));
+        const int pxMinY = std::max(0, static_cast<int>(std::floor(svgMinY * scale + padding - 1.0F)));
+        const int pxMaxY = std::min(size - 1, static_cast<int>(std::ceil(svgMaxY * scale + padding + 1.0F)));
+
+        for (int y = pxMinY; y <= pxMaxY; ++y)
+        {
+            for (int x = pxMinX; x <= pxMaxX; ++x)
             {
                 int covered = 0;
                 for (int sy = 0; sy < 2; ++sy)
@@ -673,98 +900,88 @@ Image RasterizeSvg(const std::string& path, int size)
     return image;
 }
 
-void DrawSvgPreview(Image& dst, const std::string& path, int x, int y, int size)
-{
-    FillRect(dst, x, y, size, size, 245, 247, 250, 255);
-    const Image svg = RasterizeSvg(path, size);
-    if (!svg.pixels.empty())
-    {
-        Blit(dst, svg, x, y, size, size);
-    }
-}
-
 const FontResource& GlobalFont()
 {
     static FontResource font = [] {
         FontResource result;
-#if defined(BKUI_PLATFORM_SWITCH)
-        if (R_SUCCEEDED(plInitialize(PlServiceType_User)))
-        {
-            const PlSharedFontType candidates[] = {
-                PlSharedFontType_ExtChineseSimplified,
-                PlSharedFontType_ChineseSimplified,
-                PlSharedFontType_Standard,
-            };
-
-            for (PlSharedFontType type : candidates)
-            {
-                PlFontData sharedFont{};
-                if (R_SUCCEEDED(plGetSharedFontByType(&sharedFont, type)) &&
-                    sharedFont.address != nullptr && sharedFont.size > 0)
-                {
-                    auto* bytes = static_cast<const std::uint8_t*>(sharedFont.address);
-                    result.data.assign(bytes, bytes + sharedFont.size);
-                    break;
-                }
-            }
-            plExit();
-        }
-
-        if (result.data.empty())
-        {
-            std::fprintf(stderr, "Failed to read Switch shared font; falling back to romfs font.\n");
-        }
-#endif
-
-        if (result.data.empty())
-        {
         try
         {
-            result.data = bk::FileSystem::Read("font/switch_font.ttf");
+            std::vector<bk::Buffer> fontData = bk::LoadPlatformFonts();
+            result.faces.reserve(fontData.size());
+
+            for (auto& data : fontData)
+            {
+                if (data.empty())
+                {
+                    continue;
+                }
+
+                FontResource::Face face;
+                face.data = std::move(data);
+                if (stbtt_InitFont(&face.info, face.data.data(), stbtt_GetFontOffsetForIndex(face.data.data(), 0)) == 0)
+                {
+                    continue;
+                }
+
+                result.faces.push_back(std::move(face));
+            }
         }
         catch (const std::exception& ex)
         {
-            std::fprintf(stderr, "Failed to read font resource font/switch_font.ttf: %s\n", ex.what());
+            std::fprintf(stderr, "Failed to load platform fonts: %s\n", ex.what());
             return result;
         }
-        }
 
-        if (result.data.empty())
+        if (!result.Valid())
         {
-            std::fprintf(stderr, "Font data is empty.\n");
+            std::fprintf(stderr, "No valid platform font loaded.\n");
             return result;
         }
 
-        if (stbtt_InitFont(&result.info, result.data.data(), stbtt_GetFontOffsetForIndex(result.data.data(), 0)) == 0)
-        {
-            std::fprintf(stderr, "Failed to initialize font data.\n");
-            return result;
-        }
-
-        result.valid = true;
         return result;
     }();
     return font;
 }
 
+const FontResource::Face* SelectFontFace(const FontResource& font, char32_t codepoint)
+{
+    for (const auto& face : font.faces)
+    {
+        if (stbtt_FindGlyphIndex(&face.info, static_cast<int>(codepoint)) != 0)
+        {
+            return &face;
+        }
+    }
+
+    return font.PrimaryFace();
+}
+
 void DrawText(Image& dst, const FontResource& font, const std::u32string& text, int x, int y, float px, std::uint8_t r, std::uint8_t g, std::uint8_t b)
 {
-    if (!font.valid)
+    const FontResource::Face* primaryFace = font.PrimaryFace();
+    if (primaryFace == nullptr)
     {
         return;
     }
 
-    const stbtt_fontinfo& info = font.info;
-    const float scale = stbtt_ScaleForPixelHeight(&info, px);
+    const float primaryScale = stbtt_ScaleForPixelHeight(&primaryFace->info, px);
     int ascent = 0;
     int descent = 0;
     int lineGap = 0;
-    stbtt_GetFontVMetrics(&info, &ascent, &descent, &lineGap);
+    stbtt_GetFontVMetrics(&primaryFace->info, &ascent, &descent, &lineGap);
     int cursor = x;
-    const int baseline = y + static_cast<int>(ascent * scale);
+    const int baseline = y + static_cast<int>(ascent * primaryScale);
 
     for (char32_t cp : text)
     {
+        const FontResource::Face* face = SelectFontFace(font, cp);
+        if (face == nullptr)
+        {
+            continue;
+        }
+
+        const stbtt_fontinfo& info = face->info;
+        const float scale = stbtt_ScaleForPixelHeight(&info, px);
         int advance = 0;
         int bearing = 0;
         stbtt_GetCodepointHMetrics(&info, static_cast<int>(cp), &advance, &bearing);
@@ -786,7 +1003,7 @@ void DrawText(Image& dst, const FontResource& font, const std::u32string& text, 
                     const std::uint8_t a = glyph[static_cast<std::size_t>(yy * gw + xx)];
                     if (a > 0)
                     {
-                        PutPixel(dst, cursor + x0 + xx, baseline + y0 + yy, r, g, b, a);
+                        BlendPixel(dst, cursor + x0 + xx, baseline + y0 + yy, r, g, b, a);
                     }
                 }
             }
@@ -794,47 +1011,7 @@ void DrawText(Image& dst, const FontResource& font, const std::u32string& text, 
         cursor += static_cast<int>(advance * scale);
     }
 }
-
-Image BuildShowcase()
-{
-    const FontResource& font = GlobalFont();
-
-    Image canvas;
-    canvas.width = 1280;
-    canvas.height = 720;
-    canvas.pixels.resize(static_cast<std::size_t>(canvas.width * canvas.height * 4), 255);
-
-    FillRect(canvas, 0, 0, canvas.width, canvas.height, 22, 28, 36, 255);
-    FillRect(canvas, 48, 48, 928, 544, 242, 246, 250, 255);
-    FillRect(canvas, 64, 64, 896, 76, 36, 77, 122, 255);
-
-
-
-    DrawText(canvas, font, U"BeikUI 资源渲染演示", 92, 82, 34.0F, 255, 255, 255);
-    DrawText(canvas, font, U"中文字体 / PNG 图片 / SVG 图片", 92, 158, 26.0F, 32, 42, 55);
-
-    const Image png = LoadPng("images/beiklive.png");
-    if (!png.pixels.empty())
-    {
-        Blit(canvas, png, 96, 218, 336, 220);
-    }
-    else
-    {
-        FillRect(canvas, 96, 218, 336, 220, 220, 226, 234, 255);
-        DrawText(canvas, font, U"PNG load failed", 164, 316, 22.0F, 120, 40, 40);
-    }
-    FillRect(canvas, 96, 448, 336, 38, 236, 240, 245, 255);
-    DrawText(canvas, font, U"PNG: images/beiklive.png", 112, 454, 20.0F, 20, 34, 48);
-
-    DrawSvgPreview(canvas, "images/1.svg", 592, 210, 220);
-    FillRect(canvas, 552, 448, 336, 38, 236, 240, 245, 255);
-    DrawText(canvas, font, U"SVG: images/1.svg", 590, 454, 20.0F, 20, 34, 48);
-
-    DrawText(canvas, font, U"Switch 使用 Deko3D，Windows 使用 OpenGL", 196, 526, 24.0F, 56, 64, 74);
-    return canvas;
 }
-}
-
 int main(int argc, char** argv)
 {
     try
@@ -867,15 +1044,94 @@ int main(int argc, char** argv)
             return 1;
         }
 
-        const Image showcase = BuildShowcase();
-        const std::array<Vertex, 6> vertices = {{
-            {{-0.86F,  0.82F}, {1.0F, 1.0F, 1.0F}, {0.0F, 0.0F}},
-            {{-0.86F, -0.82F}, {1.0F, 1.0F, 1.0F}, {0.0F, 1.0F}},
-            {{ 0.86F, -0.82F}, {1.0F, 1.0F, 1.0F}, {1.0F, 1.0F}},
-            {{-0.86F,  0.82F}, {1.0F, 1.0F, 1.0F}, {0.0F, 0.0F}},
-            {{ 0.86F, -0.82F}, {1.0F, 1.0F, 1.0F}, {1.0F, 1.0F}},
-            {{ 0.86F,  0.82F}, {1.0F, 1.0F, 1.0F}, {1.0F, 0.0F}},
-        }};
+        const FontResource& font = GlobalFont();
+        const Image avatarImage = LoadPng("images/beiklive.png");
+        const Image svgImage = RasterizeSvg("images/1.svg", 320);
+
+        const int leftPaneWidth = 608;
+        const int avatarCenterX = 128;
+        const int avatarCenterY = 112;
+        const int avatarDiameter = 108;
+        const int svgStageX = 84;
+        const int svgStageY = 214;
+        const int svgStageWidth = 432;
+        const int svgStageHeight = 392;
+        const int svgImageX = 140;
+        const int svgImageY = 258;
+        const int svgImageSize = 320;
+        const int screenWidth = 1280;
+        const int screenHeight = 720;
+
+        const Image staticBackground = [&]() {
+            Image bg;
+            bg.width = 1280;
+            bg.height = 720;
+            bg.pixels.resize(static_cast<std::size_t>(bg.width * bg.height * 4), 255);
+
+            FillRect(bg, 0, 0, bg.width, bg.height, 15, 19, 26, 255);
+            FillRect(bg, 0, 0, leftPaneWidth, bg.height, 24, 33, 46, 255);
+            FillRect(bg, leftPaneWidth, 0, bg.width - leftPaneWidth, bg.height, 245, 247, 250, 255);
+            FillRect(bg, leftPaneWidth - 1, 0, 2, bg.height, 59, 71, 89, 255);
+
+            FillCircle(bg, avatarCenterX, avatarCenterY, avatarDiameter / 2 + 6, 100, 179, 255, 255);
+            FillCircle(bg, avatarCenterX, avatarCenterY, avatarDiameter / 2, 232, 238, 246, 255);
+            if (!avatarImage.pixels.empty())
+            {
+                BlitCircle(bg, avatarImage, avatarCenterX, avatarCenterY, avatarDiameter);
+            }
+            else
+            {
+                FillCircle(bg, avatarCenterX, avatarCenterY, avatarDiameter / 2, 64, 81, 104, 255);
+                DrawText(bg, font, U"BK", avatarCenterX - 22, avatarCenterY - 18, 28.0F, 255, 255, 255);
+            }
+
+            DrawText(bg, font, U"BeikUI 资源渲染演示", 208, 72, 34.0F, 255, 255, 255);
+            DrawText(bg, font, U"头像使用 PNG 资源，展示图片使用 SVG 并做旋转缩放变换", 208, 116, 22.0F, 186, 200, 216);
+            DrawText(bg, font, U"Avatar: images/beiklive.png", 208, 150, 20.0F, 120, 210, 255);
+
+            FillRect(bg, svgStageX, svgStageY, svgStageWidth, svgStageHeight, 236, 241, 247, 255);
+            FillRect(bg, svgStageX + 10, svgStageY + 10, svgStageWidth - 20, svgStageHeight - 20, 251, 253, 255, 255);
+            DrawText(bg, font, U"SVG Showcase", 96, 218, 24.0F, 37, 53, 74);
+            DrawText(bg, font, U"Animated rotation + scale matrix transform", 96, 248, 18.0F, 94, 110, 129);
+            DrawText(bg, font, U"Asset: images/1.svg", 96, 614, 20.0F, 173, 188, 205);
+            DrawText(bg, font, U"Switch: Deko3D    Windows: OpenGL", 96, 646, 20.0F, 132, 149, 169);
+
+            DrawText(bg, font, U"字体与图标能力", 656, 68, 34.0F, 24, 35, 52);
+            DrawText(bg, font, U"同一套通用字体接口，展示多语言文本和 Material Icons 回退链", 656, 108, 21.0F, 87, 100, 116);
+
+            DrawText(bg, font, U"English: Resource and UI rendering", 656, 164, 24.0F, 31, 41, 55);
+            DrawText(bg, font, U"简体中文: 字体链与图像资源展示", 656, 210, 28.0F, 31, 41, 55);
+            DrawText(bg, font, U"繁體中文: 系統字型與回退測試", 656, 258, 28.0F, 31, 41, 55);
+            DrawText(bg, font, U"日本語: システムフォント対応", 656, 306, 28.0F, 31, 41, 55);
+            DrawText(bg, font, U"한국어: 폰트 폴백 테스트", 656, 354, 28.0F, 31, 41, 55);
+
+            DrawText(bg, font, U"Material Icons", 656, 432, 24.0F, 24, 35, 52);
+            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 468, 20.0F, 37, 99, 235);
+            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 510, 34.0F, 0, 150, 136);
+            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 572, 52.0F, 220, 68, 55);
+            DrawText(bg, font, U"\uE88A home    \uE8B8 settings    \uE87D favorite", 656, 644, 22.0F, 107, 120, 138);
+            return bg;
+        }();
+
+        const Image svgLayer = [&]() {
+            Image layer = MakeImage(svgImageSize, svgImageSize, 251, 253, 255, 255);
+            if (!svgImage.pixels.empty())
+            {
+                const int inset = 18;
+                Blit(layer, svgImage, inset, inset, svgImageSize - inset * 2, svgImageSize - inset * 2);
+            }
+            return layer;
+        }();
+
+        const std::array<Vertex, 6> backgroundVertices = MakeQuad(-1.0F, 1.0F, 1.0F, -1.0F);
+        std::array<Vertex, 6> svgVertices = MakeRotatedPixelQuad(
+            svgImageX + svgImageSize / 2,
+            svgImageY + svgImageSize / 2,
+            svgImageSize,
+            svgImageSize,
+            0.0F,
+            screenWidth,
+            screenHeight);
 
         const char* vertexShaderSource =
 #if defined(BKUI_PLATFORM_SWITCH)
@@ -915,15 +1171,25 @@ int main(int argc, char** argv)
 #endif
 
         bk::SwapchainHandle swapchain = device->GetMainSwapchain();
-        bk::BufferHandle vertexBuffer = device->CreateBuffer(bk::BufferDesc{
+        bk::BufferHandle backgroundVertexBuffer = device->CreateBuffer(bk::BufferDesc{
             bk::BufferUsage::Vertex,
-            sizeof(Vertex) * vertices.size(),
-            vertices.data(),
+            sizeof(Vertex) * backgroundVertices.size(),
+            backgroundVertices.data(),
         });
-        bk::TextureHandle texture = device->CreateTexture(bk::TextureDesc{
-            static_cast<std::uint32_t>(showcase.width),
-            static_cast<std::uint32_t>(showcase.height),
-            showcase.pixels.data(),
+        bk::BufferHandle svgVertexBuffer = device->CreateBuffer(bk::BufferDesc{
+            bk::BufferUsage::Vertex,
+            sizeof(Vertex) * svgVertices.size(),
+            svgVertices.data(),
+        });
+        bk::TextureHandle backgroundTexture = device->CreateTexture(bk::TextureDesc{
+            static_cast<std::uint32_t>(staticBackground.width),
+            static_cast<std::uint32_t>(staticBackground.height),
+            staticBackground.pixels.data(),
+        });
+        bk::TextureHandle svgTexture = device->CreateTexture(bk::TextureDesc{
+            static_cast<std::uint32_t>(svgLayer.width),
+            static_cast<std::uint32_t>(svgLayer.height),
+            svgLayer.pixels.data(),
         });
         bk::ShaderHandle vertexShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Vertex, vertexShaderSource});
         bk::ShaderHandle fragmentShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Fragment, fragmentShaderSource});
@@ -940,22 +1206,52 @@ int main(int argc, char** argv)
         });
         bk::CommandBufferHandle commandBuffer = device->CreateCommandBuffer();
 
-        if (!bk::IsValid(vertexBuffer) || !bk::IsValid(texture) || !bk::IsValid(vertexShader) ||
-            !bk::IsValid(fragmentShader) || !bk::IsValid(pipeline) || !bk::IsValid(commandBuffer))
+        if (!bk::IsValid(backgroundVertexBuffer) || !bk::IsValid(svgVertexBuffer) ||
+            !bk::IsValid(backgroundTexture) || !bk::IsValid(svgTexture) ||
+            !bk::IsValid(vertexShader) ||
+            !bk::IsValid(fragmentShader) || !bk::IsValid(pipeline) ||
+            !bk::IsValid(commandBuffer))
         {
             std::fprintf(stderr, "Failed to create resource demo RHI objects.\n");
             return 1;
         }
 
+        auto startTime = std::chrono::steady_clock::now();
+
         while (platform->IsRunning())
         {
             platform->PollEvents();
+
+            const auto now = std::chrono::steady_clock::now();
+            const float elapsed = std::chrono::duration<float>(now - startTime).count();
+            const float angle = elapsed * 3.14159265358979323846F * 0.45F;
+            const float scale = 0.82F + 0.24F * (0.5F + 0.5F * std::sin(elapsed * 3.14159265358979323846F * 0.90F));
+            const int offsetX = static_cast<int>(std::sin(elapsed * 1.7F) * 18.0F);
+            const int offsetY = static_cast<int>(std::cos(elapsed * 1.3F) * 14.0F);
+            const int animatedSize = static_cast<int>(static_cast<float>(svgImageSize) * scale);
+            const int centerX = svgImageX + svgImageSize / 2 + offsetX;
+            const int centerY = svgImageY + svgImageSize / 2 + offsetY;
+            svgVertices = MakeRotatedPixelQuad(centerX, centerY, animatedSize, animatedSize, angle, screenWidth, screenHeight);
+
+            if (!device->UpdateBuffer(svgVertexBuffer, bk::BufferDesc{
+                bk::BufferUsage::Vertex,
+                sizeof(Vertex) * svgVertices.size(),
+                svgVertices.data(),
+            }))
+            {
+                std::fprintf(stderr, "Failed to update SVG vertex buffer.\n");
+                break;
+            }
+
             device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.05F, 0.06F, 0.08F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
             device->BindPipeline(commandBuffer, pipeline);
-            device->BindVertexBuffer(commandBuffer, vertexBuffer);
-            device->BindTexture(commandBuffer, texture);
-            device->Draw(commandBuffer, static_cast<std::uint32_t>(vertices.size()));
+            device->BindVertexBuffer(commandBuffer, backgroundVertexBuffer);
+            device->BindTexture(commandBuffer, backgroundTexture);
+            device->Draw(commandBuffer, static_cast<std::uint32_t>(backgroundVertices.size()));
+            device->BindVertexBuffer(commandBuffer, svgVertexBuffer);
+            device->BindTexture(commandBuffer, svgTexture);
+            device->Draw(commandBuffer, static_cast<std::uint32_t>(svgVertices.size()));
             device->EndCommandBuffer(commandBuffer);
             device->Submit(commandBuffer);
             device->EndFrame(swapchain);
@@ -965,8 +1261,10 @@ int main(int argc, char** argv)
         device->DestroyPipeline(pipeline);
         device->DestroyShader(fragmentShader);
         device->DestroyShader(vertexShader);
-        device->DestroyTexture(texture);
-        device->DestroyBuffer(vertexBuffer);
+        device->DestroyTexture(svgTexture);
+        device->DestroyTexture(backgroundTexture);
+        device->DestroyBuffer(svgVertexBuffer);
+        device->DestroyBuffer(backgroundVertexBuffer);
         device->Shutdown();
         platform->Shutdown();
         bk::FileSystem::Shutdown();

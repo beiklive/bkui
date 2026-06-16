@@ -250,6 +250,18 @@ public:
         return BufferHandle{static_cast<std::uint32_t>(buffers_.size())};
     }
 
+    bool UpdateBuffer(BufferHandle handle, const BufferDesc& desc) override
+    {
+        DkBufferResource* buffer = Lookup(buffers_, handle.id);
+        if (buffer == nullptr || desc.size == 0 || desc.data == nullptr || desc.size > buffer->allocation.size)
+        {
+            return false;
+        }
+
+        std::memcpy(buffer->allocation.cpu, desc.data, desc.size);
+        return true;
+    }
+
     TextureHandle CreateTexture(const TextureDesc& desc) override
     {
         if (desc.width == 0 || desc.height == 0 || desc.rgba == nullptr ||
@@ -313,6 +325,32 @@ public:
 
         textures_.push_back(texture);
         return TextureHandle{static_cast<std::uint32_t>(textures_.size())};
+    }
+
+    bool UpdateTexture(TextureHandle handle, const TextureDesc& desc) override
+    {
+        DkTextureResource* texture = Lookup(textures_, handle.id);
+        if (texture == nullptr || desc.width == 0 || desc.height == 0 || desc.rgba == nullptr ||
+            texture->width != desc.width || texture->height != desc.height)
+        {
+            return false;
+        }
+
+        std::memcpy(texture->stagingMemory.cpu, desc.rgba, static_cast<std::size_t>(desc.width) * desc.height * 4);
+
+        cmdBuf_.clear();
+        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        dk::ImageView dstView{texture->image};
+        cmdBuf_.copyBufferToImage(
+            {texture->stagingMemory.gpu},
+            dstView,
+            {0, 0, 0, desc.width, desc.height, 1}
+        );
+        queue_.submitCommands(cmdBuf_.finishList());
+        queue_.waitIdle();
+        cmdBuf_.clear();
+        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        return true;
     }
 
     ShaderHandle CreateShader(const ShaderDesc& desc) override
@@ -511,6 +549,7 @@ public:
     {
         (void)commandBuffer;
         queue_.submitCommands(renderCmdList_);
+        renderCmdList_ = {};
     }
 
     void EndFrame(SwapchainHandle swapchain) override

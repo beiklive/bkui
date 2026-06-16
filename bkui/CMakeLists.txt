@@ -13,7 +13,13 @@ file(
 )
 
 if(BKUI_PLATFORM_SWITCH)
-    list(APPEND BKUI_SRC src/platform/SwitchPlatform.cpp)
+    file(
+        GLOB_RECURSE
+        BKUI_PLATFORM_SRC
+        CONFIGURE_DEPENDS
+        src/platform/switch/*.cpp
+    )
+    list(APPEND BKUI_SRC ${BKUI_PLATFORM_SRC})
     list(APPEND BKUI_SRC src/backend/deko3d/Deko3DDevice.cpp)
 else()
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
@@ -24,7 +30,13 @@ else()
     set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
     add_subdirectory("${BKUI_THIRD_PARTY_DIR}/SDL3" "${CMAKE_BINARY_DIR}/third_party/SDL3" EXCLUDE_FROM_ALL)
 
-    list(APPEND BKUI_SRC src/platform/SDLPlatform.cpp)
+    file(
+        GLOB_RECURSE
+        BKUI_PLATFORM_SRC
+        CONFIGURE_DEPENDS
+        src/platform/sdl/*.cpp
+    )
+    list(APPEND BKUI_SRC ${BKUI_PLATFORM_SRC})
     list(APPEND BKUI_SRC src/backend/opengl/OpenGLDevice.cpp)
 endif()
 

@@ -122,7 +122,9 @@ public:
 
     virtual SwapchainHandle GetMainSwapchain() const = 0;
     virtual BufferHandle CreateBuffer(const BufferDesc& desc) = 0;
+    virtual bool UpdateBuffer(BufferHandle handle, const BufferDesc& desc) = 0;
     virtual TextureHandle CreateTexture(const TextureDesc& desc) = 0;
+    virtual bool UpdateTexture(TextureHandle handle, const TextureDesc& desc) = 0;
     virtual ShaderHandle CreateShader(const ShaderDesc& desc) = 0;
     virtual PipelineHandle CreatePipeline(const PipelineDesc& desc) = 0;
     virtual CommandBufferHandle CreateCommandBuffer() = 0;

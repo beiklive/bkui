@@ -37,6 +37,7 @@ struct GLFunctions
     PFNGLGENBUFFERSPROC GenBuffers = nullptr;
     PFNGLBINDBUFFERPROC BindBuffer = nullptr;
     PFNGLBUFFERDATAPROC BufferData = nullptr;
+    PFNGLBUFFERSUBDATAPROC BufferSubData = nullptr;
     PFNGLDELETEBUFFERSPROC DeleteBuffers = nullptr;
     PFNGLGETUNIFORMLOCATIONPROC GetUniformLocation = nullptr;
     PFNGLUNIFORM1IPROC Uniform1i = nullptr;
@@ -74,11 +75,19 @@ struct GLPipeline
 
 struct GLCommandBuffer
 {
-    PipelineHandle pipeline;
-    BufferHandle vertexBuffer;
-    TextureHandle texture;
-    std::uint32_t vertexCount = 0;
-    std::uint32_t firstVertex = 0;
+    struct DrawCall
+    {
+        PipelineHandle pipeline;
+        BufferHandle vertexBuffer;
+        TextureHandle texture;
+        std::uint32_t vertexCount = 0;
+        std::uint32_t firstVertex = 0;
+    };
+
+    PipelineHandle currentPipeline;
+    BufferHandle currentVertexBuffer;
+    TextureHandle currentTexture;
+    std::vector<DrawCall> draws;
     bool recording = false;
 };
 
@@ -115,6 +124,7 @@ bool LoadGL(Platform& platform, GLFunctions& gl)
         LoadProc(platform, gl.GenBuffers, "glGenBuffers") &&
         LoadProc(platform, gl.BindBuffer, "glBindBuffer") &&
         LoadProc(platform, gl.BufferData, "glBufferData") &&
+        LoadProc(platform, gl.BufferSubData, "glBufferSubData") &&
         LoadProc(platform, gl.DeleteBuffers, "glDeleteBuffers") &&
         LoadProc(platform, gl.GetUniformLocation, "glGetUniformLocation") &&
         LoadProc(platform, gl.Uniform1i, "glUniform1i") &&
@@ -345,6 +355,20 @@ public:
         return BufferHandle{static_cast<std::uint32_t>(buffers_.size())};
     }
 
+    bool UpdateBuffer(BufferHandle handle, const BufferDesc& desc) override
+    {
+        GLBuffer* buffer = Lookup(buffers_, handle.id);
+        if (buffer == nullptr || desc.size == 0 || desc.data == nullptr)
+        {
+            return false;
+        }
+
+        gl_.BindBuffer(buffer->target, buffer->id);
+        gl_.BufferSubData(buffer->target, 0, static_cast<GLsizeiptr>(desc.size), desc.data);
+        gl_.BindBuffer(buffer->target, 0);
+        return true;
+    }
+
     TextureHandle CreateTexture(const TextureDesc& desc) override
     {
         if (desc.width == 0 || desc.height == 0 || desc.rgba == nullptr)
@@ -376,6 +400,36 @@ public:
 
         textures_.push_back(texture);
         return TextureHandle{static_cast<std::uint32_t>(textures_.size())};
+    }
+
+    bool UpdateTexture(TextureHandle handle, const TextureDesc& desc) override
+    {
+        if (desc.width == 0 || desc.height == 0 || desc.rgba == nullptr ||
+            handle.id == 0 || handle.id > textures_.size())
+        {
+            return false;
+        }
+
+        GLTexture& texture = textures_[handle.id - 1];
+        if (texture.id == 0 || texture.width != desc.width || texture.height != desc.height)
+        {
+            return false;
+        }
+
+        glBindTexture(GL_TEXTURE_2D, texture.id);
+        glTexSubImage2D(
+            GL_TEXTURE_2D,
+            0,
+            0,
+            0,
+            static_cast<GLsizei>(desc.width),
+            static_cast<GLsizei>(desc.height),
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            desc.rgba
+        );
+        glBindTexture(GL_TEXTURE_2D, 0);
+        return true;
     }
 
     ShaderHandle CreateShader(const ShaderDesc& desc) override
@@ -521,11 +575,10 @@ public:
             return;
         }
 
-        commandBuffer->pipeline = {};
-        commandBuffer->vertexBuffer = {};
-        commandBuffer->texture = {};
-        commandBuffer->vertexCount = 0;
-        commandBuffer->firstVertex = 0;
+        commandBuffer->currentPipeline = {};
+        commandBuffer->currentVertexBuffer = {};
+        commandBuffer->currentTexture = {};
+        commandBuffer->draws.clear();
         commandBuffer->recording = true;
     }
 
@@ -534,7 +587,7 @@ public:
         GLCommandBuffer* commandBuffer = LookupCommandBuffer(commandBuffers_, commandBufferHandle.id);
         if (commandBuffer != nullptr && commandBuffer->recording)
         {
-            commandBuffer->pipeline = pipeline;
+            commandBuffer->currentPipeline = pipeline;
         }
     }
 
@@ -543,7 +596,7 @@ public:
         GLCommandBuffer* commandBuffer = LookupCommandBuffer(commandBuffers_, commandBufferHandle.id);
         if (commandBuffer != nullptr && commandBuffer->recording)
         {
-            commandBuffer->vertexBuffer = buffer;
+            commandBuffer->currentVertexBuffer = buffer;
         }
     }
 
@@ -552,7 +605,7 @@ public:
         GLCommandBuffer* commandBuffer = LookupCommandBuffer(commandBuffers_, commandBufferHandle.id);
         if (commandBuffer != nullptr && commandBuffer->recording)
         {
-            commandBuffer->texture = texture;
+            commandBuffer->currentTexture = texture;
         }
     }
 
@@ -561,8 +614,13 @@ public:
         GLCommandBuffer* commandBuffer = LookupCommandBuffer(commandBuffers_, commandBufferHandle.id);
         if (commandBuffer != nullptr && commandBuffer->recording)
         {
-            commandBuffer->vertexCount = vertexCount;
-            commandBuffer->firstVertex = firstVertex;
+            commandBuffer->draws.push_back(GLCommandBuffer::DrawCall{
+                commandBuffer->currentPipeline,
+                commandBuffer->currentVertexBuffer,
+                commandBuffer->currentTexture,
+                vertexCount,
+                firstVertex,
+            });
         }
     }
 
@@ -578,59 +636,63 @@ public:
     void Submit(CommandBufferHandle commandBufferHandle) override
     {
         GLCommandBuffer* commandBuffer = LookupCommandBuffer(commandBuffers_, commandBufferHandle.id);
-        if (commandBuffer == nullptr || commandBuffer->vertexCount == 0)
+        if (commandBuffer == nullptr || commandBuffer->draws.empty())
         {
             return;
         }
 
-        GLPipeline* pipeline = LookupPipeline(pipelines_, commandBuffer->pipeline.id);
-        GLBuffer* vertexBuffer = Lookup(buffers_, commandBuffer->vertexBuffer.id);
-        if (pipeline == nullptr || vertexBuffer == nullptr)
+        for (const auto& draw : commandBuffer->draws)
         {
-            return;
-        }
-
-        gl_.UseProgram(pipeline->program);
-        if (commandBuffer->texture.id != 0 && commandBuffer->texture.id <= textures_.size())
-        {
-            GLTexture& texture = textures_[commandBuffer->texture.id - 1];
-            if (texture.id != 0)
+            GLPipeline* pipeline = LookupPipeline(pipelines_, draw.pipeline.id);
+            GLBuffer* vertexBuffer = Lookup(buffers_, draw.vertexBuffer.id);
+            if (pipeline == nullptr || vertexBuffer == nullptr)
             {
-                gl_.ActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, texture.id);
-                const GLint location = gl_.GetUniformLocation(pipeline->program, "uTexture");
-                if (location >= 0)
+                continue;
+            }
+
+            gl_.UseProgram(pipeline->program);
+            if (draw.texture.id != 0 && draw.texture.id <= textures_.size())
+            {
+                GLTexture& texture = textures_[draw.texture.id - 1];
+                if (texture.id != 0)
                 {
-                    gl_.Uniform1i(location, 0);
+                    gl_.ActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, texture.id);
+                    const GLint location = gl_.GetUniformLocation(pipeline->program, "uTexture");
+                    if (location >= 0)
+                    {
+                        gl_.Uniform1i(location, 0);
+                    }
                 }
             }
-        }
-        gl_.BindVertexArray(pipeline->vao);
-        gl_.BindBuffer(GL_ARRAY_BUFFER, vertexBuffer->id);
+            gl_.BindVertexArray(pipeline->vao);
+            gl_.BindBuffer(GL_ARRAY_BUFFER, vertexBuffer->id);
 
-        for (const VertexAttributeDesc& attribute : pipeline->attributes)
-        {
-            gl_.EnableVertexAttribArray(attribute.location);
-            gl_.VertexAttribPointer(
-                attribute.location,
-                VertexFormatComponents(attribute.format),
-                GL_FLOAT,
-                GL_FALSE,
-                static_cast<GLsizei>(pipeline->vertexLayout.stride),
-                reinterpret_cast<void*>(attribute.offset)
+            for (const VertexAttributeDesc& attribute : pipeline->attributes)
+            {
+                gl_.EnableVertexAttribArray(attribute.location);
+                gl_.VertexAttribPointer(
+                    attribute.location,
+                    VertexFormatComponents(attribute.format),
+                    GL_FLOAT,
+                    GL_FALSE,
+                    static_cast<GLsizei>(pipeline->vertexLayout.stride),
+                    reinterpret_cast<void*>(attribute.offset)
+                );
+            }
+
+            glDrawArrays(
+                ToGLTopology(pipeline->topology),
+                static_cast<GLint>(draw.firstVertex),
+                static_cast<GLsizei>(draw.vertexCount)
             );
         }
-
-        glDrawArrays(
-            ToGLTopology(pipeline->topology),
-            static_cast<GLint>(commandBuffer->firstVertex),
-            static_cast<GLsizei>(commandBuffer->vertexCount)
-        );
 
         gl_.BindBuffer(GL_ARRAY_BUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
         gl_.BindVertexArray(0);
         gl_.UseProgram(0);
+        commandBuffer->recording = false;
     }
 
     void EndFrame(SwapchainHandle swapchain) override
