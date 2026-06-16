@@ -12,6 +12,9 @@ enum class RenderCommandType
 {
     Rect,
     Text,
+    Line,
+    PushClip,
+    PopClip,
 };
 
 /// 浮点矩形区域。
@@ -31,6 +34,8 @@ struct RenderCommand
     Color color{};
     std::string text;
     float fontSize = 16.0F;
+    Vector2 lineStart{};
+    Vector2 lineEnd{};
 };
 
 }

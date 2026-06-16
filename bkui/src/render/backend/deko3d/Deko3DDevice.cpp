@@ -353,6 +353,44 @@ public:
         return true;
     }
 
+    bool UpdateTextureRegion(TextureHandle handle, const TextureRegionDesc& desc) override
+    {
+        DkTextureResource* texture = Lookup(textures_, handle.id);
+        if (texture == nullptr || desc.width == 0 || desc.height == 0 || desc.rgba == nullptr ||
+            desc.x + desc.width > texture->width || desc.y + desc.height > texture->height)
+        {
+            return false;
+        }
+
+        const std::size_t textureStride = static_cast<std::size_t>(texture->width) * 4;
+        const std::size_t regionStride = static_cast<std::size_t>(desc.width) * 4;
+        auto* dstBytes = static_cast<std::uint8_t*>(texture->stagingMemory.cpu);
+        const auto* srcBytes = static_cast<const std::uint8_t*>(desc.rgba);
+
+        for (std::uint32_t row = 0; row < desc.height; ++row)
+        {
+            std::memcpy(
+                dstBytes + static_cast<std::size_t>(desc.y + row) * textureStride + static_cast<std::size_t>(desc.x) * 4,
+                srcBytes + static_cast<std::size_t>(row) * regionStride,
+                regionStride
+            );
+        }
+
+        cmdBuf_.clear();
+        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        dk::ImageView dstView{texture->image};
+        cmdBuf_.copyBufferToImage(
+            {texture->stagingMemory.gpu},
+            dstView,
+            {0, 0, 0, texture->width, texture->height, 1}
+        );
+        queue_.submitCommands(cmdBuf_.finishList());
+        queue_.waitIdle();
+        cmdBuf_.clear();
+        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        return true;
+    }
+
     ShaderHandle CreateShader(const ShaderDesc& desc) override
     {
         std::string path = desc.source;

@@ -17,6 +17,12 @@ public:
     void PushRect(const Rect& bounds, const Color& color);
     /// 压入一条文本绘制命令。
     void PushText(const Rect& bounds, std::string text, float fontSize, const Color& color);
+    /// 压入一条线段命令。
+    void PushLine(const Vector2& start, const Vector2& end, const Color& color);
+    /// 开始一个新的裁剪区域。
+    void PushClipRect(const Rect& bounds);
+    /// 结束当前裁剪区域。
+    void PopClipRect();
 
     /// 只读访问当前收集到的命令列表。
     [[nodiscard]] const std::vector<RenderCommand>& Commands() const;

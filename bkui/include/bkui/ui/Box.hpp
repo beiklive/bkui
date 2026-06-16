@@ -40,7 +40,7 @@ public:
     void Layout() override;
 
 protected:
-    void DrawSelf(RenderQueue& queue) const override;
+    void Draw(RenderQueue& queue) const override;
 
     BoxDirection direction_;
     float spacing_ = 0.0F;

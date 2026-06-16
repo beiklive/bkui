@@ -32,7 +32,7 @@ public:
     /// 估算标签占用尺寸。
     Size Measure(const Size& available) const override;
     /// 生成标签对应的文本绘制命令。
-    void DrawSelf(RenderQueue& queue) const override;
+    void Draw(RenderQueue& queue) const override;
 
 private:
     std::string text_;

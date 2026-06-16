@@ -50,10 +50,10 @@ Size Label::Measure(const Size& available) const
     return Size{estimatedWidth, estimatedHeight};
 }
 
-void Label::DrawSelf(RenderQueue& queue) const
+void Label::Draw(RenderQueue& queue) const
 {
-    Box::DrawSelf(queue);
-    queue.PushText(frame_, text_, fontSize_, textColor_);
+    Box::Draw(queue);
+    queue.PushText(GetContentFrame(), text_, fontSize_, textColor_);
 }
 
 }

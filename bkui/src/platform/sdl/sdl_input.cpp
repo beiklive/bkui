@@ -11,6 +11,13 @@ namespace bk::sdl
 {
 namespace
 {
+struct PrimaryTouchState
+{
+    std::int64_t id = -1;
+    Vector2 position{};
+    bool down = false;
+};
+
 void CopyCString(char* dst, std::size_t dstSize, const char* src)
 {
     if (dst == nullptr || dstSize == 0)
@@ -75,11 +82,21 @@ void RemoveKeyDown(InputState& input, SDL_Scancode scancode)
 
 void FillTouchPoints(SDL_Window* window, InputState& input)
 {
+    static PrimaryTouchState previousPrimary{};
+
     (void)window;
     int deviceCount = 0;
     SDL_TouchID* devices = SDL_GetTouchDevices(&deviceCount);
     if (devices == nullptr || deviceCount <= 0)
     {
+        if (previousPrimary.down)
+        {
+            input.touchCount = 1;
+            input.touchPoints[0].id = previousPrimary.id;
+            input.touchPoints[0].position = previousPrimary.position;
+            input.touchPoints[0].released = true;
+            previousPrimary = {};
+        }
         return;
     }
 
@@ -114,6 +131,25 @@ void FillTouchPoints(SDL_Window* window, InputState& input)
     }
 
     SDL_free(devices);
+
+    if (input.touchCount > 0)
+    {
+        auto& primary = input.touchPoints[0];
+        primary.pressed = !previousPrimary.down || previousPrimary.id != primary.id;
+        previousPrimary = PrimaryTouchState{
+            primary.id,
+            primary.position,
+            true,
+        };
+    }
+    else if (previousPrimary.down)
+    {
+        input.touchCount = 1;
+        input.touchPoints[0].id = previousPrimary.id;
+        input.touchPoints[0].position = previousPrimary.position;
+        input.touchPoints[0].released = true;
+        previousPrimary = {};
+    }
 }
 }
 

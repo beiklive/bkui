@@ -432,6 +432,38 @@ public:
         return true;
     }
 
+    bool UpdateTextureRegion(TextureHandle handle, const TextureRegionDesc& desc) override
+    {
+        if (desc.width == 0 || desc.height == 0 || desc.rgba == nullptr ||
+            handle.id == 0 || handle.id > textures_.size())
+        {
+            return false;
+        }
+
+        GLTexture& texture = textures_[handle.id - 1];
+        if (texture.id == 0 ||
+            desc.x + desc.width > texture.width ||
+            desc.y + desc.height > texture.height)
+        {
+            return false;
+        }
+
+        glBindTexture(GL_TEXTURE_2D, texture.id);
+        glTexSubImage2D(
+            GL_TEXTURE_2D,
+            0,
+            static_cast<GLint>(desc.x),
+            static_cast<GLint>(desc.y),
+            static_cast<GLsizei>(desc.width),
+            static_cast<GLsizei>(desc.height),
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            desc.rgba
+        );
+        glBindTexture(GL_TEXTURE_2D, 0);
+        return true;
+    }
+
     ShaderHandle CreateShader(const ShaderDesc& desc) override
     {
         if (desc.source.empty())

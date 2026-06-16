@@ -90,6 +90,16 @@ struct TextureDesc
     const void* rgba = nullptr;
 };
 
+/// 纹理局部更新参数，坐标和尺寸以像素为单位。
+struct TextureRegionDesc
+{
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    const void* rgba = nullptr;
+};
+
 /// 着色器创建参数。
 struct ShaderDesc
 {
@@ -151,6 +161,8 @@ public:
     virtual TextureHandle CreateTexture(const TextureDesc& desc) = 0;
     /// 更新已有纹理内容。
     virtual bool UpdateTexture(TextureHandle handle, const TextureDesc& desc) = 0;
+    /// 更新已有纹理的局部区域。
+    virtual bool UpdateTextureRegion(TextureHandle handle, const TextureRegionDesc& desc) = 0;
     /// 创建着色器对象。
     virtual ShaderHandle CreateShader(const ShaderDesc& desc) = 0;
     /// 创建图形管线对象。

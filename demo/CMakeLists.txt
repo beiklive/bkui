@@ -1,15 +1,29 @@
 add_executable(bkui_demo src/main.cpp)
+add_executable(bkui_perf_demo src/perf_demo.cpp)
+add_executable(bkui_ui_tree_demo src/ui_tree_demo.cpp)
 
-target_link_libraries(bkui_demo PRIVATE BeikUI::bkui)
-target_compile_features(bkui_demo PRIVATE cxx_std_20)
-target_include_directories(
-    bkui_demo
-    PRIVATE
-        "${CMAKE_SOURCE_DIR}/bkui/third_party/platform/stb"
-)
+foreach(target bkui_demo bkui_perf_demo bkui_ui_tree_demo)
+    target_link_libraries(${target} PRIVATE BeikUI::bkui)
+    target_compile_features(${target} PRIVATE cxx_std_20)
+    target_include_directories(
+        ${target}
+        PRIVATE
+            "${CMAKE_SOURCE_DIR}/bkui/third_party/platform/stb"
+    )
+endforeach()
 
 set_target_properties(
     bkui_demo
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${BKUI_RUNTIME_OUTPUT_DIR}"
+)
+set_target_properties(
+    bkui_perf_demo
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${BKUI_RUNTIME_OUTPUT_DIR}"
+)
+set_target_properties(
+    bkui_ui_tree_demo
     PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${BKUI_RUNTIME_OUTPUT_DIR}"
 )
@@ -55,7 +69,7 @@ if(BKUI_PLATFORM_SWITCH)
     add_custom_target(
         bkui_demo.nro
         ALL
-        DEPENDS bkui_demo
+        DEPENDS bkui_demo bkui_perf_demo bkui_ui_tree_demo
         COMMAND "${CMAKE_COMMAND}" -E remove_directory "${BKUI_SWITCH_ROMFS_DIR}"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/resources" "${BKUI_SWITCH_ROMFS_DIR}"
         COMMAND "${CMAKE_COMMAND}" -E remove_directory "${BKUI_SWITCH_ROMFS_DIR}/font"
@@ -87,4 +101,6 @@ else()
     )
 
     add_dependencies(bkui_demo bkui_demo.resources)
+    add_dependencies(bkui_perf_demo bkui_demo.resources)
+    add_dependencies(bkui_ui_tree_demo bkui_demo.resources)
 endif()

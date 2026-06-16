@@ -2,17 +2,274 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstring>
 #include <cstdint>
+#include <limits>
 #include <utility>
 
 namespace bk
 {
 
-Application::Application() = default;
+Application* Application::activeApplication_ = nullptr;
+
+namespace
+{
+constexpr float kNavigationEpsilon = 0.001F;
+
+std::vector<std::shared_ptr<View>> VisibleChildrenSorted(const std::shared_ptr<View>& root)
+{
+    std::vector<std::shared_ptr<View>> ordered;
+    if (!root)
+    {
+        return ordered;
+    }
+
+    ordered.reserve(root->Children().size());
+    for (const auto& child : root->Children())
+    {
+        if (child && child->IsVisible())
+        {
+            ordered.push_back(child);
+        }
+    }
+
+    std::stable_sort(
+        ordered.begin(),
+        ordered.end(),
+        [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
+            return lhs->GetZIndex() < rhs->GetZIndex();
+        });
+    return ordered;
+}
+
+bool NearlyEqual(float lhs, float rhs)
+{
+    return std::abs(lhs - rhs) <= kNavigationEpsilon;
+}
+
+Vector2 RectCenter(const Rect& rect)
+{
+    return Vector2{
+        rect.x + rect.width * 0.5F,
+        rect.y + rect.height * 0.5F,
+    };
+}
+
+bool IsInSubtree(const std::shared_ptr<View>& root, const std::shared_ptr<View>& view)
+{
+    if (!root || !view)
+    {
+        return false;
+    }
+
+    if (root == view)
+    {
+        return true;
+    }
+
+    const View* current = view->GetParent();
+    while (current != nullptr)
+    {
+        if (current == root.get())
+        {
+            return true;
+        }
+        current = current->GetParent();
+    }
+
+    return false;
+}
+
+std::shared_ptr<View> TopLevelAncestor(const std::shared_ptr<View>& view)
+{
+    if (!view)
+    {
+        return nullptr;
+    }
+
+    std::shared_ptr<View> current = view;
+    while (current && current->GetParent() != nullptr)
+    {
+        current = std::const_pointer_cast<View>(current->GetParent()->shared_from_this());
+    }
+
+    return current;
+}
+
+std::shared_ptr<View> FindTopmostVisibleRoot(const std::vector<std::shared_ptr<View>>& views)
+{
+    std::shared_ptr<View> topmost;
+    for (const auto& view : views)
+    {
+        if (!view || !view->IsVisible())
+        {
+            continue;
+        }
+
+        if (!topmost || view->GetZIndex() >= topmost->GetZIndex())
+        {
+            topmost = view;
+        }
+    }
+
+    return topmost;
+}
+
+std::shared_ptr<View> FindBestNavigationTargetInScope(
+    const std::shared_ptr<View>& root,
+    const std::shared_ptr<View>& source,
+    NavigationDirection direction)
+{
+    if (!root || !source)
+    {
+        return nullptr;
+    }
+
+    std::vector<std::shared_ptr<View>> stack{root};
+    std::vector<std::shared_ptr<View>> focusables;
+    while (!stack.empty())
+    {
+        std::shared_ptr<View> current = stack.back();
+        stack.pop_back();
+        if (!current || !current->IsVisible())
+        {
+            continue;
+        }
+
+        if (current != source && current->IsFocusable())
+        {
+            focusables.push_back(current);
+        }
+
+        std::vector<std::shared_ptr<View>> children = VisibleChildrenSorted(current);
+        for (auto it = children.rbegin(); it != children.rend(); ++it)
+        {
+            stack.push_back(*it);
+        }
+    }
+
+    const Vector2 sourceCenter = RectCenter(source->GetFrame());
+    std::shared_ptr<View> bestCandidate;
+    float bestPrimaryDistance = std::numeric_limits<float>::max();
+    float bestSecondaryDistance = std::numeric_limits<float>::max();
+    int bestZIndex = std::numeric_limits<int>::min();
+
+    for (const auto& candidate : focusables)
+    {
+        const Vector2 targetCenter = RectCenter(candidate->GetFrame());
+        const float deltaX = targetCenter.x - sourceCenter.x;
+        const float deltaY = targetCenter.y - sourceCenter.y;
+
+        float primaryDistance = 0.0F;
+        float secondaryDistance = 0.0F;
+        bool validDirection = false;
+        switch (direction)
+        {
+        case NavigationDirection::Up:
+            validDirection = deltaY < 0.0F;
+            primaryDistance = -deltaY;
+            secondaryDistance = std::fabs(deltaX);
+            break;
+        case NavigationDirection::Down:
+            validDirection = deltaY > 0.0F;
+            primaryDistance = deltaY;
+            secondaryDistance = std::fabs(deltaX);
+            break;
+        case NavigationDirection::Left:
+            validDirection = deltaX < 0.0F;
+            primaryDistance = -deltaX;
+            secondaryDistance = std::fabs(deltaY);
+            break;
+        case NavigationDirection::Right:
+            validDirection = deltaX > 0.0F;
+            primaryDistance = deltaX;
+            secondaryDistance = std::fabs(deltaY);
+            break;
+        }
+
+        if (!validDirection)
+        {
+            continue;
+        }
+
+        const bool betterPrimary = primaryDistance < bestPrimaryDistance - kNavigationEpsilon;
+        const bool samePrimary = NearlyEqual(primaryDistance, bestPrimaryDistance);
+        const bool betterSecondary = secondaryDistance < bestSecondaryDistance - kNavigationEpsilon;
+        const bool sameSecondary = NearlyEqual(secondaryDistance, bestSecondaryDistance);
+        const bool betterZ = candidate->GetZIndex() > bestZIndex;
+
+        if (betterPrimary ||
+            (samePrimary && betterSecondary) ||
+            (samePrimary && sameSecondary && betterZ))
+        {
+            bestCandidate = candidate;
+            bestPrimaryDistance = primaryDistance;
+            bestSecondaryDistance = secondaryDistance;
+            bestZIndex = candidate->GetZIndex();
+        }
+    }
+
+    return bestCandidate;
+}
+
+std::shared_ptr<View> ResolvePreferredFocusCandidate(const std::shared_ptr<View>& root)
+{
+    if (!root || !root->IsVisible())
+    {
+        return nullptr;
+    }
+
+    if (std::shared_ptr<View> preferred = root->GetDefaultFocusView())
+    {
+        if (preferred->IsVisible())
+        {
+            if (preferred->IsFocusable())
+            {
+                return preferred;
+            }
+
+            if (std::shared_ptr<View> nested = ResolvePreferredFocusCandidate(preferred))
+            {
+                return nested;
+            }
+        }
+    }
+
+    if (root->IsFocusable())
+    {
+        return root;
+    }
+
+    for (const auto& child : VisibleChildrenSorted(root))
+    {
+        if (std::shared_ptr<View> nested = ResolvePreferredFocusCandidate(child))
+        {
+            return nested;
+        }
+    }
+
+    return nullptr;
+}
+}
+
+Application::Application()
+{
+    activeApplication_ = this;
+}
 
 Application::~Application()
 {
     Shutdown();
+    if (activeApplication_ == this)
+    {
+        activeApplication_ = nullptr;
+    }
+}
+
+Application* Application::Active()
+{
+    return activeApplication_;
 }
 
 bool Application::Initialize(const ApplicationDesc& desc, int argc, const char* const* argv)
@@ -136,6 +393,113 @@ std::uint64_t Application::GetFrameIndex() const
     return frameIndex_;
 }
 
+void Application::SetInputState(const InputState& input)
+{
+    inputState_ = input;
+}
+
+const InputState& Application::GetInputState() const
+{
+    return inputState_;
+}
+
+bool Application::SetFocusedView(const std::shared_ptr<View>& view)
+{
+    if (view && (!view->IsVisible() || !view->IsFocusable()))
+    {
+        return false;
+    }
+
+    std::shared_ptr<View> current = focusedView_.lock();
+    if (current == view)
+    {
+        return current != nullptr;
+    }
+
+    if (current)
+    {
+        current->SetFocusedState(false);
+    }
+
+    focusedView_.reset();
+    if (view)
+    {
+        view->SetFocusedState(true);
+        focusedView_ = view;
+
+        std::shared_ptr<View> cursor = view;
+        while (cursor)
+        {
+            cursor->RememberFocusedDescendant(view);
+
+            const View* parent = cursor->GetParent();
+            cursor = parent != nullptr ? std::const_pointer_cast<View>(parent->shared_from_this()) : nullptr;
+        }
+    }
+
+    return view != nullptr;
+}
+
+std::shared_ptr<View> Application::GetFocusedView() const
+{
+    return focusedView_.lock();
+}
+
+void Application::ClearFocus()
+{
+    SetFocusedView(nullptr);
+}
+
+void Application::ClearFocus(const std::shared_ptr<View>& view)
+{
+    if (focusedView_.lock() == view)
+    {
+        SetFocusedView(nullptr);
+    }
+}
+
+bool Application::MoveFocus(NavigationDirection direction)
+{
+    const std::shared_ptr<View> activeRoot = FindTopmostVisibleRoot(views_);
+    std::shared_ptr<View> focused = focusedView_.lock();
+
+    if (focused && activeRoot && !IsInSubtree(activeRoot, focused))
+    {
+        focused.reset();
+    }
+
+    if (focused)
+    {
+        if (std::shared_ptr<View> target = focused->FindNavigationTarget(direction))
+        {
+            if (!activeRoot || IsInSubtree(activeRoot, target))
+            {
+                return SetFocusedView(target);
+            }
+        }
+
+        if (std::shared_ptr<View> scopedTarget = FindBestNavigationTargetInScope(
+                activeRoot ? activeRoot : TopLevelAncestor(focused),
+                focused,
+                direction))
+        {
+            return SetFocusedView(scopedTarget);
+        }
+
+        return false;
+    }
+
+    if (activeRoot)
+    {
+        if (std::shared_ptr<View> preferred = ResolvePreferredFocusCandidate(activeRoot))
+        {
+            return SetFocusedView(preferred);
+        }
+    }
+
+    return SetFocusedView(FindFirstFocusableView());
+}
+
 bool Application::RunFrame(float deltaSeconds, bool clearRenderQueue)
 {
     if (!IsRunning())
@@ -149,8 +513,21 @@ bool Application::RunFrame(float deltaSeconds, bool clearRenderQueue)
     }
 
     onFrameBegin_.Emit(*this, deltaSeconds, frameIndex_);
+    ProcessInput();
 
-    for (const auto& view : views_)
+    std::vector<std::shared_ptr<View>> orderedViews = views_;
+    std::stable_sort(
+        orderedViews.begin(),
+        orderedViews.end(),
+        [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
+            if (!lhs || !rhs)
+            {
+                return static_cast<bool>(lhs);
+            }
+            return lhs->GetZIndex() < rhs->GetZIndex();
+        });
+
+    for (const auto& view : orderedViews)
     {
         if (!view || !view->IsVisible())
         {
@@ -158,7 +535,7 @@ bool Application::RunFrame(float deltaSeconds, bool clearRenderQueue)
         }
 
         view->Frame(deltaSeconds);
-        view->Draw(renderQueue_);
+        view->Paint(renderQueue_);
     }
 
     metaData_.Set("application.frame_index", frameIndex_);
@@ -323,6 +700,231 @@ Application::FrameEvent& Application::OnFrameEnd()
     return onFrameEnd_;
 }
 
+void Application::ProcessInput()
+{
+    const bool touchDown = inputState_.touchCount > 0 && inputState_.touchPoints[0].down;
+    const bool touchPressed = inputState_.touchCount > 0 && inputState_.touchPoints[0].pressed;
+    const bool touchReleased = inputState_.touchCount > 0 && inputState_.touchPoints[0].released;
+    const Vector2 pointerPosition = touchDown || touchPressed || touchReleased
+        ? inputState_.touchPoints[0].position
+        : inputState_.mousePosition;
+
+    if (inputState_.mouseMoved || inputState_.touchMoved)
+    {
+        if (std::shared_ptr<View> hovered = FindTopmostViewAt(pointerPosition))
+        {
+            hovered->DispatchPointerMove(pointerPosition);
+        }
+    }
+
+    if (inputState_.mouseLeftPressed || touchPressed)
+    {
+        std::shared_ptr<View> target = FindTopmostViewAt(pointerPosition);
+        pressedView_ = target;
+        if (target)
+        {
+            if (target->IsFocusable())
+            {
+                SetFocusedView(target);
+            }
+            target->DispatchPointerDown(pointerPosition);
+        }
+    }
+
+    if (inputState_.keyPressed)
+    {
+        if (IsDirectionalKey(inputState_.lastKeyEvent, NavigationDirection::Up))
+        {
+            MoveFocus(NavigationDirection::Up);
+        }
+        else if (IsDirectionalKey(inputState_.lastKeyEvent, NavigationDirection::Down))
+        {
+            MoveFocus(NavigationDirection::Down);
+        }
+        else if (IsDirectionalKey(inputState_.lastKeyEvent, NavigationDirection::Left))
+        {
+            MoveFocus(NavigationDirection::Left);
+        }
+        else if (IsDirectionalKey(inputState_.lastKeyEvent, NavigationDirection::Right))
+        {
+            MoveFocus(NavigationDirection::Right);
+        }
+        else if (std::strcmp(inputState_.lastKeyEvent.name, "Tab") == 0)
+        {
+            MoveFocus(inputState_.lastKeyEvent.shift ? NavigationDirection::Left : NavigationDirection::Right);
+        }
+
+        if (std::shared_ptr<View> focused = focusedView_.lock())
+        {
+            focused->DispatchKeyDown(inputState_.lastKeyEvent);
+        }
+    }
+
+    if (inputState_.keyReleased)
+    {
+        if (std::shared_ptr<View> focused = focusedView_.lock())
+        {
+            focused->DispatchKeyUp(inputState_.lastKeyEvent);
+        }
+    }
+
+    if (inputState_.mouseLeftReleased || touchReleased)
+    {
+        std::shared_ptr<View> releasedTarget = FindTopmostViewAt(pointerPosition);
+        if (std::shared_ptr<View> pressedTarget = pressedView_.lock())
+        {
+            pressedTarget->DispatchPointerUp(pointerPosition);
+            if (pressedTarget == releasedTarget || pressedTarget->ContainsPoint(pointerPosition))
+            {
+                pressedTarget->DispatchClick(pointerPosition);
+            }
+        }
+        pressedView_.reset();
+    }
+
+    if (IsActivationKey(inputState_))
+    {
+        if (std::shared_ptr<View> focused = focusedView_.lock())
+        {
+            const Vector2 center{
+                focused->GetFrame().x + focused->GetFrame().width * 0.5F,
+                focused->GetFrame().y + focused->GetFrame().height * 0.5F,
+            };
+            focused->DispatchClick(center);
+        }
+    }
+}
+
+std::shared_ptr<View> Application::FindTopmostViewAt(const Vector2& point) const
+{
+    std::vector<std::shared_ptr<View>> orderedViews = views_;
+    std::stable_sort(
+        orderedViews.begin(),
+        orderedViews.end(),
+        [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
+            if (!lhs || !rhs)
+            {
+                return static_cast<bool>(lhs);
+            }
+            return lhs->GetZIndex() > rhs->GetZIndex();
+        });
+
+    for (const auto& view : orderedViews)
+    {
+        if (!view || !view->IsVisible())
+        {
+            continue;
+        }
+
+        if (std::shared_ptr<View> hit = view->HitTest(point))
+        {
+            return hit;
+        }
+    }
+
+    return nullptr;
+}
+
+std::shared_ptr<View> Application::FindFirstFocusableView() const
+{
+    auto visit = [&](const std::shared_ptr<View>& root, const auto& self) -> std::shared_ptr<View> {
+        if (!root || !root->IsVisible())
+        {
+            return nullptr;
+        }
+
+        for (const auto& child : root->VisibleChildrenByZOrder())
+        {
+            if (std::shared_ptr<View> nested = self(child, self))
+            {
+                return nested;
+            }
+        }
+
+        if (root->IsFocusable())
+        {
+            return root;
+        }
+
+        return nullptr;
+    };
+
+    std::vector<std::shared_ptr<View>> orderedViews = views_;
+    std::stable_sort(
+        orderedViews.begin(),
+        orderedViews.end(),
+        [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
+            if (!lhs || !rhs)
+            {
+                return static_cast<bool>(lhs);
+            }
+            return lhs->GetZIndex() < rhs->GetZIndex();
+        });
+
+    const std::shared_ptr<View> activeRoot = FindTopmostVisibleRoot(orderedViews);
+    if (activeRoot)
+    {
+        if (std::shared_ptr<View> preferred = ResolvePreferredFocusCandidate(activeRoot))
+        {
+            return preferred;
+        }
+
+        if (std::shared_ptr<View> focusable = visit(activeRoot, visit))
+        {
+            return focusable;
+        }
+    }
+
+    for (const auto& view : orderedViews)
+    {
+        if (std::shared_ptr<View> preferred = ResolvePreferredFocusCandidate(view))
+        {
+            return preferred;
+        }
+
+        if (std::shared_ptr<View> focusable = visit(view, visit))
+        {
+            return focusable;
+        }
+    }
+    return nullptr;
+}
+
+bool Application::IsDirectionalKey(const InputState::KeyEvent& key, NavigationDirection direction)
+{
+    switch (direction)
+    {
+    case NavigationDirection::Up:
+        return std::strcmp(key.name, "Up") == 0;
+    case NavigationDirection::Down:
+        return std::strcmp(key.name, "Down") == 0;
+    case NavigationDirection::Left:
+        return std::strcmp(key.name, "Left") == 0;
+    case NavigationDirection::Right:
+        return std::strcmp(key.name, "Right") == 0;
+    }
+
+    return false;
+}
+
+bool Application::IsActivationKey(const InputState& input)
+{
+    if (input.confirmPressed)
+    {
+        return true;
+    }
+
+    if (!input.keyPressed)
+    {
+        return false;
+    }
+
+    return std::strcmp(input.lastKeyEvent.name, "Return") == 0 ||
+        std::strcmp(input.lastKeyEvent.name, "Enter") == 0 ||
+        std::strcmp(input.lastKeyEvent.name, "Space") == 0 ||
+        std::strcmp(input.lastKeyEvent.name, "A") == 0;
+}
+
 void Application::ResetState()
 {
     descriptor_ = ApplicationDesc{};
@@ -330,6 +932,9 @@ void Application::ResetState()
     views_.clear();
     renderQueue_.Clear();
     metaData_.Clear();
+    inputState_ = {};
+    focusedView_.reset();
+    pressedView_.reset();
     frameIndex_ = 0;
     initialized_ = false;
     running_ = false;

@@ -8,7 +8,7 @@ namespace bk
 {
 
 /// 简单按钮控件，当前提供背景与文本渲染。
-class Button final : public Box
+class Button : public Box
 {
 public:
     /// 使用初始文本创建按钮。
@@ -37,7 +37,7 @@ public:
     /// 估算按钮占用尺寸。
     Size Measure(const Size& available) const override;
     /// 生成按钮背景与文本的绘制命令。
-    void DrawSelf(RenderQueue& queue) const override;
+    void Draw(RenderQueue& queue) const override;
 
 private:
     std::string text_;

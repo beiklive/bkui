@@ -8,6 +8,13 @@ namespace bk::sw
 {
 namespace
 {
+struct PrimaryTouchState
+{
+    std::int64_t id = -1;
+    Vector2 position{};
+    bool down = false;
+};
+
 void CopyCString(char* dst, std::size_t dstSize, const char* src)
 {
     if (dst == nullptr || dstSize == 0)
@@ -90,9 +97,19 @@ void FillKeyboardState(InputState& input)
 
 void FillTouchState(InputState& input)
 {
+    static PrimaryTouchState previousPrimary{};
+
     HidTouchScreenState touchState{};
     if (!hidGetTouchScreenStates(&touchState, 1))
     {
+        if (previousPrimary.down)
+        {
+            input.touchCount = 1;
+            input.touchPoints[0].id = previousPrimary.id;
+            input.touchPoints[0].position = previousPrimary.position;
+            input.touchPoints[0].released = true;
+            previousPrimary = {};
+        }
         return;
     }
 
@@ -107,6 +124,25 @@ void FillTouchState(InputState& input)
             static_cast<float>(source.y),
         };
         touch.down = true;
+    }
+
+    if (input.touchCount > 0)
+    {
+        auto& primary = input.touchPoints[0];
+        primary.pressed = !previousPrimary.down || previousPrimary.id != primary.id;
+        previousPrimary = PrimaryTouchState{
+            primary.id,
+            primary.position,
+            true,
+        };
+    }
+    else if (previousPrimary.down)
+    {
+        input.touchCount = 1;
+        input.touchPoints[0].id = previousPrimary.id;
+        input.touchPoints[0].position = previousPrimary.position;
+        input.touchPoints[0].released = true;
+        previousPrimary = {};
     }
 }
 

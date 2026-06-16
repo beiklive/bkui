@@ -4,6 +4,7 @@
 #include <bkui/core/Logger.hpp>
 #include <bkui/core/MetaData.hpp>
 #include <bkui/core/Singleton.hpp>
+#include <bkui/platform/Platform.hpp>
 #include <bkui/render/RenderQueue.hpp>
 #include <bkui/ui/View.hpp>
 
@@ -47,6 +48,9 @@ public:
     Application();
     ~Application();
 
+    /// 获取当前活动的应用实例，没有时返回空指针。
+    [[nodiscard]] static Application* Active();
+
     /// 初始化应用上下文。
     bool Initialize(const ApplicationDesc& desc = {}, int argc = 0, const char* const* argv = nullptr);
 
@@ -88,6 +92,27 @@ public:
 
     /// 获取当前已经执行完成的帧编号。
     [[nodiscard]] std::uint64_t GetFrameIndex() const;
+
+    /// 设置当前帧输入状态，用于焦点导航和基础交互分发。
+    void SetInputState(const InputState& input);
+
+    /// 获取当前缓存的输入状态。
+    [[nodiscard]] const InputState& GetInputState() const;
+
+    /// 设置焦点视图。
+    bool SetFocusedView(const std::shared_ptr<View>& view);
+
+    /// 获取当前焦点视图。
+    [[nodiscard]] std::shared_ptr<View> GetFocusedView() const;
+
+    /// 清除当前焦点。
+    void ClearFocus();
+
+    /// 如果当前焦点等于指定视图则清除。
+    void ClearFocus(const std::shared_ptr<View>& view);
+
+    /// 按方向移动焦点。
+    bool MoveFocus(NavigationDirection direction);
 
     /// 执行单帧更新与绘制。
     bool RunFrame(float deltaSeconds = 0.0F, bool clearRenderQueue = true);
@@ -162,6 +187,12 @@ public:
     [[nodiscard]] FrameEvent& OnFrameEnd();
 
 private:
+    void ProcessInput();
+    [[nodiscard]] std::shared_ptr<View> FindTopmostViewAt(const Vector2& point) const;
+    [[nodiscard]] std::shared_ptr<View> FindFirstFocusableView() const;
+    [[nodiscard]] static bool IsDirectionalKey(const InputState::KeyEvent& key, NavigationDirection direction);
+    [[nodiscard]] static bool IsActivationKey(const InputState& input);
+
     void ResetState();
     void StoreDescriptorMetaData();
     void CaptureArguments(int argc, const char* const* argv);
@@ -171,10 +202,14 @@ private:
     std::vector<std::shared_ptr<View>> views_{};
     RenderQueue renderQueue_{};
     MetaData metaData_{};
+    InputState inputState_{};
+    std::weak_ptr<View> focusedView_{};
+    std::weak_ptr<View> pressedView_{};
     std::uint64_t frameIndex_ = 0;
     bool initialized_ = false;
     bool running_ = false;
     bool quitRequested_ = false;
+    static Application* activeApplication_;
     LifecycleEvent onInitialize_{};
     LifecycleEvent onQuitRequested_{};
     LifecycleEvent onShutdown_{};
