@@ -58,6 +58,7 @@ if(BKUI_PLATFORM_SWITCH)
         DEPENDS bkui_demo
         COMMAND "${CMAKE_COMMAND}" -E remove_directory "${BKUI_SWITCH_ROMFS_DIR}"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/resources" "${BKUI_SWITCH_ROMFS_DIR}"
+        COMMAND "${CMAKE_COMMAND}" -E remove_directory "${BKUI_SWITCH_ROMFS_DIR}/font"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${BKUI_SWITCH_SHADER_DIR}"
         COMMAND "${NX_UAM_EXE}" -s vert -o "${BKUI_SWITCH_SHADER_DIR}/deko_triangle_vsh.dksh" "${CMAKE_SOURCE_DIR}/resources/shaders/deko3d/triangle_vsh.glsl"
         COMMAND "${NX_UAM_EXE}" -s frag -o "${BKUI_SWITCH_SHADER_DIR}/deko_triangle_fsh.dksh" "${CMAKE_SOURCE_DIR}/resources/shaders/deko3d/triangle_fsh.glsl"
