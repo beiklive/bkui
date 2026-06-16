@@ -21,7 +21,7 @@ public:
         {
             return false;
         }
-        if (!sw::InitAudio() || !sw::InitIme() || !sw::InitInput(pad_))
+        if (!sw::InitAudio() || !sw::InitIme(imeManager_) || !sw::InitInput(pad_))
         {
             Shutdown();
             return false;
@@ -65,6 +65,39 @@ public:
         return running_;
     }
 
+    ImeManager* GetImeManager() override
+    {
+        return imeManager_;
+    }
+
+    bool StartTextInput() override
+    {
+        return false;
+    }
+
+    void StopTextInput() override
+    {
+    }
+
+    bool IsTextInputActive() const override
+    {
+        return false;
+    }
+
+    void SetTextInputArea(int x, int y, int width, int height, int cursor) override
+    {
+        (void)x;
+        (void)y;
+        (void)width;
+        (void)height;
+        (void)cursor;
+    }
+
+    TextInputStatus GetTextInputStatus() const override
+    {
+        return sw::GetTextInputStatus();
+    }
+
     bool CreateOpenGLContext(const OpenGLContextDesc& desc) override
     {
         (void)desc;
@@ -91,6 +124,7 @@ public:
 
 private:
     WindowDesc desc_;
+    ImeManager* imeManager_ = nullptr;
     InputState input_;
     bool running_ = false;
     PadState pad_{};

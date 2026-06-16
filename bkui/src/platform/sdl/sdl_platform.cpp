@@ -21,7 +21,7 @@ public:
         {
             return false;
         }
-        if (!sdl::InitAudio() || !sdl::InitIme())
+        if (!sdl::InitAudio() || !sdl::InitIme(window_, imeManager_))
         {
             Shutdown();
             return false;
@@ -33,7 +33,7 @@ public:
 
     void PollEvents() override
     {
-        sdl::PollInput(running_, input_);
+        sdl::PollInput(window_, running_, input_);
     }
 
     void Shutdown() override
@@ -65,6 +65,43 @@ public:
         return running_;
     }
 
+    ImeManager* GetImeManager() override
+    {
+        return imeManager_;
+    }
+
+    bool StartTextInput() override
+    {
+        if (window_ == nullptr)
+        {
+            return false;
+        }
+        return SDL_StartTextInput(window_);
+    }
+
+    void StopTextInput() override
+    {
+        if (window_ != nullptr)
+        {
+            SDL_StopTextInput(window_);
+        }
+    }
+
+    bool IsTextInputActive() const override
+    {
+        return window_ != nullptr && SDL_TextInputActive(window_);
+    }
+
+    void SetTextInputArea(int x, int y, int width, int height, int cursor) override
+    {
+        sdl::SetImeInputArea(window_, x, y, width, height, cursor);
+    }
+
+    TextInputStatus GetTextInputStatus() const override
+    {
+        return sdl::GetTextInputStatus();
+    }
+
     bool CreateOpenGLContext(const OpenGLContextDesc& desc) override
     {
         return sdl::CreateOpenGLContext(window_, glContext_, desc);
@@ -94,6 +131,7 @@ private:
     WindowDesc desc_;
     SDL_Window* window_ = nullptr;
     SDL_GLContext glContext_ = nullptr;
+    ImeManager* imeManager_ = nullptr;
     InputState input_;
     bool running_ = false;
 };

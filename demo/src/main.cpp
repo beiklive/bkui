@@ -9,12 +9,15 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstring>
 #include <cstddef>
 #include <cstdint>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <iomanip>
+#include <sstream>
 #include <limits>
 #include <string>
 #include <utility>
@@ -956,6 +959,168 @@ const FontResource::Face* SelectFontFace(const FontResource& font, char32_t code
     return font.PrimaryFace();
 }
 
+void DrawText(Image& dst, const FontResource& font, const std::u32string& text, int x, int y, float px, std::uint8_t r, std::uint8_t g, std::uint8_t b);
+
+std::u32string Utf8ToUtf32(const std::string& text)
+{
+    std::u32string result;
+    result.reserve(text.size());
+    std::size_t i = 0;
+    while (i < text.size())
+    {
+        const unsigned char c = static_cast<unsigned char>(text[i]);
+        if (c < 0x80)
+        {
+            result.push_back(static_cast<char32_t>(c));
+            ++i;
+        }
+        else if ((c & 0xE0) == 0xC0 && i + 1 < text.size())
+        {
+            const char32_t cp =
+                (static_cast<char32_t>(c & 0x1F) << 6) |
+                static_cast<char32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3F);
+            result.push_back(cp);
+            i += 2;
+        }
+        else if ((c & 0xF0) == 0xE0 && i + 2 < text.size())
+        {
+            const char32_t cp =
+                (static_cast<char32_t>(c & 0x0F) << 12) |
+                (static_cast<char32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6) |
+                static_cast<char32_t>(static_cast<unsigned char>(text[i + 2]) & 0x3F);
+            result.push_back(cp);
+            i += 3;
+        }
+        else if ((c & 0xF8) == 0xF0 && i + 3 < text.size())
+        {
+            const char32_t cp =
+                (static_cast<char32_t>(c & 0x07) << 18) |
+                (static_cast<char32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3F) << 12) |
+                (static_cast<char32_t>(static_cast<unsigned char>(text[i + 2]) & 0x3F) << 6) |
+                static_cast<char32_t>(static_cast<unsigned char>(text[i + 3]) & 0x3F);
+            result.push_back(cp);
+            i += 4;
+        }
+        else
+        {
+            result.push_back(U'?');
+            ++i;
+        }
+    }
+    return result;
+}
+
+std::string NarrowCString(const char* text)
+{
+    return text == nullptr ? std::string{} : std::string{text};
+}
+
+std::u32string ToUtf32(const std::string& text)
+{
+    return Utf8ToUtf32(text);
+}
+
+std::string FormatFloat(float value)
+{
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(1) << value;
+    return stream.str();
+}
+
+std::string JoinKeys(const bk::InputState& input)
+{
+    if (input.keysDownCount == 0)
+    {
+        return "None";
+    }
+
+    std::string result;
+    for (std::size_t i = 0; i < input.keysDownCount; ++i)
+    {
+        if (i > 0)
+        {
+            result += "  ";
+        }
+        result += input.keysDown[i].name;
+    }
+    return result;
+}
+
+Image BuildStatusPanel(const FontResource& font, const bk::InputState& input, const bk::TextInputStatus& imeStatus)
+{
+    Image panel = MakeImage(532, 228, 252, 253, 255, 235);
+    FillRect(panel, 0, 0, panel.width, 2, 88, 101, 242, 255);
+    FillRect(panel, 0, panel.height - 1, panel.width, 1, 221, 226, 234, 255);
+
+    DrawText(panel, font, U"输入与 IME 状态", 20, 18, 28.0F, 24, 35, 52);
+    DrawText(panel, font, U"按 I 键可触发文本输入，Enter / A 可确认，Esc / B 可取消", 20, 50, 18.0F, 99, 111, 126);
+
+    const std::string pointerLine =
+        "Mouse: (" + FormatFloat(input.mousePosition.x) + ", " + FormatFloat(input.mousePosition.y) + ")" +
+        (input.mouseLeftDown ? "  L" : "") +
+        (input.mouseMiddleDown ? "  M" : "") +
+        (input.mouseRightDown ? "  R" : "");
+    DrawText(panel, font, ToUtf32(pointerLine), 20, 86, 20.0F, 32, 43, 58);
+
+    std::string touchLine = "Touch: ";
+    if (input.touchCount == 0)
+    {
+        touchLine += "inactive";
+    }
+    else
+    {
+        const auto& touch = input.touchPoints[0];
+        touchLine += "#" + std::to_string(touch.id) + " (" + FormatFloat(touch.position.x) + ", " + FormatFloat(touch.position.y) + ")";
+    }
+    DrawText(panel, font, ToUtf32(touchLine), 20, 116, 20.0F, 32, 43, 58);
+
+    const std::string lastKey = std::string{"Last Key: "} +
+        (input.lastKeyEvent.name[0] != '\0' ? input.lastKeyEvent.name : "None") +
+        (input.lastKeyEvent.down ? " (down)" : (input.keyReleased ? " (up)" : ""));
+    DrawText(panel, font, ToUtf32(lastKey), 20, 146, 20.0F, 32, 43, 58);
+
+    const std::string heldKeys = "Held Keys: " + JoinKeys(input);
+    DrawText(panel, font, ToUtf32(heldKeys), 20, 176, 20.0F, 32, 43, 58);
+
+    std::string imeLine = "IME: ";
+    imeLine += imeStatus.active ? "active" : "idle";
+    if (imeStatus.submitted)
+    {
+        imeLine += "  submitted=" + NarrowCString(imeStatus.text);
+    }
+    else if (imeStatus.canceled)
+    {
+        imeLine += "  canceled";
+    }
+    else if (imeStatus.editing || imeStatus.composition[0] != '\0')
+    {
+        imeLine += "  composing=" + NarrowCString(imeStatus.composition);
+    }
+    else if (imeStatus.text[0] != '\0')
+    {
+        imeLine += "  text=" + NarrowCString(imeStatus.text);
+    }
+    DrawText(panel, font, ToUtf32(imeLine), 20, 206, 18.0F, 71, 85, 104);
+
+    return panel;
+}
+
+Image BuildDraggableSquareLayer(int width, int height, int squareX, int squareY, int squareSize, bool dragging)
+{
+    Image layer = MakeImage(width, height, 0, 0, 0, 0);
+
+    const std::uint8_t borderR = dragging ? 255 : 70;
+    const std::uint8_t borderG = dragging ? 196 : 130;
+    const std::uint8_t borderB = dragging ? 90 : 255;
+    const std::uint8_t fillR = dragging ? 255 : 100;
+    const std::uint8_t fillG = dragging ? 233 : 179;
+    const std::uint8_t fillB = dragging ? 173 : 255;
+
+    FillRect(layer, squareX, squareY, squareSize, squareSize, borderR, borderG, borderB, 255);
+    FillRect(layer, squareX + 4, squareY + 4, squareSize - 8, squareSize - 8, fillR, fillG, fillB, 255);
+    return layer;
+}
+
 void DrawText(Image& dst, const FontResource& font, const std::u32string& text, int x, int y, float px, std::uint8_t r, std::uint8_t g, std::uint8_t b)
 {
     const FontResource::Face* primaryFace = font.PrimaryFace();
@@ -1059,6 +1224,15 @@ int main(int argc, char** argv)
         const int svgImageX = 140;
         const int svgImageY = 258;
         const int svgImageSize = 320;
+        const int statusPanelX = 656;
+        const int statusPanelY = 430;
+        const int statusPanelWidth = 532;
+        const int statusPanelHeight = 228;
+        const int dragLayerX = 700;
+        const int dragLayerY = 232;
+        const int dragLayerWidth = 220;
+        const int dragLayerHeight = 140;
+        const int dragSquareSize = 72;
         const int screenWidth = 1280;
         const int screenHeight = 720;
 
@@ -1105,11 +1279,16 @@ int main(int argc, char** argv)
             DrawText(bg, font, U"日本語: システムフォント対応", 656, 306, 28.0F, 31, 41, 55);
             DrawText(bg, font, U"한국어: 폰트 폴백 테스트", 656, 354, 28.0F, 31, 41, 55);
 
-            DrawText(bg, font, U"Material Icons", 656, 432, 24.0F, 24, 35, 52);
-            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 468, 20.0F, 37, 99, 235);
-            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 510, 34.0F, 0, 150, 136);
-            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 572, 52.0F, 220, 68, 55);
-            DrawText(bg, font, U"\uE88A home    \uE8B8 settings    \uE87D favorite", 656, 644, 22.0F, 107, 120, 138);
+            DrawText(bg, font, U"Material Icons", 656, 408, 24.0F, 24, 35, 52);
+            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 442, 20.0F, 37, 99, 235);
+            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 480, 34.0F, 0, 150, 136);
+            DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 536, 52.0F, 220, 68, 55);
+            DrawText(bg, font, U"\uE88A home    \uE8B8 settings    \uE87D favorite", 656, 604, 22.0F, 107, 120, 138);
+
+            FillRect(bg, dragLayerX - 12, dragLayerY - 12, dragLayerWidth + 24, dragLayerHeight + 24, 236, 241, 247, 255);
+            FillRect(bg, dragLayerX - 2, dragLayerY - 2, dragLayerWidth + 4, dragLayerHeight + 4, 220, 226, 234, 255);
+            DrawText(bg, font, U"Draggable Square", dragLayerX - 2, dragLayerY - 44, 24.0F, 24, 35, 52);
+            DrawText(bg, font, U"Mouse / touch drag test", dragLayerX - 2, dragLayerY - 16, 18.0F, 99, 111, 126);
             return bg;
         }();
 
@@ -1132,6 +1311,30 @@ int main(int argc, char** argv)
             0.0F,
             screenWidth,
             screenHeight);
+        const std::array<Vertex, 6> statusVertices = MakePixelQuad(
+            statusPanelX,
+            statusPanelY,
+            statusPanelWidth,
+            statusPanelHeight,
+            screenWidth,
+            screenHeight);
+        const std::array<Vertex, 6> dragVertices = MakePixelQuad(
+            dragLayerX,
+            dragLayerY,
+            dragLayerWidth,
+            dragLayerHeight,
+            screenWidth,
+            screenHeight);
+
+        const bk::InputState initialInput = platform->GetInput();
+        const bk::TextInputStatus initialImeStatus = platform->GetTextInputStatus();
+        Image statusLayer = BuildStatusPanel(font, initialInput, initialImeStatus);
+        int dragSquareX = 72;
+        int dragSquareY = 34;
+        bool dragActive = false;
+        float dragOffsetX = 0.0F;
+        float dragOffsetY = 0.0F;
+        Image dragLayer = BuildDraggableSquareLayer(dragLayerWidth, dragLayerHeight, dragSquareX, dragSquareY, dragSquareSize, dragActive);
 
         const char* vertexShaderSource =
 #if defined(BKUI_PLATFORM_SWITCH)
@@ -1191,6 +1394,26 @@ int main(int argc, char** argv)
             static_cast<std::uint32_t>(svgLayer.height),
             svgLayer.pixels.data(),
         });
+        bk::BufferHandle statusVertexBuffer = device->CreateBuffer(bk::BufferDesc{
+            bk::BufferUsage::Vertex,
+            sizeof(Vertex) * statusVertices.size(),
+            statusVertices.data(),
+        });
+        bk::TextureHandle statusTexture = device->CreateTexture(bk::TextureDesc{
+            static_cast<std::uint32_t>(statusLayer.width),
+            static_cast<std::uint32_t>(statusLayer.height),
+            statusLayer.pixels.data(),
+        });
+        bk::BufferHandle dragVertexBuffer = device->CreateBuffer(bk::BufferDesc{
+            bk::BufferUsage::Vertex,
+            sizeof(Vertex) * dragVertices.size(),
+            dragVertices.data(),
+        });
+        bk::TextureHandle dragTexture = device->CreateTexture(bk::TextureDesc{
+            static_cast<std::uint32_t>(dragLayer.width),
+            static_cast<std::uint32_t>(dragLayer.height),
+            dragLayer.pixels.data(),
+        });
         bk::ShaderHandle vertexShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Vertex, vertexShaderSource});
         bk::ShaderHandle fragmentShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Fragment, fragmentShaderSource});
         const std::array<bk::VertexAttributeDesc, 3> attributes = {{
@@ -1206,8 +1429,8 @@ int main(int argc, char** argv)
         });
         bk::CommandBufferHandle commandBuffer = device->CreateCommandBuffer();
 
-        if (!bk::IsValid(backgroundVertexBuffer) || !bk::IsValid(svgVertexBuffer) ||
-            !bk::IsValid(backgroundTexture) || !bk::IsValid(svgTexture) ||
+        if (!bk::IsValid(backgroundVertexBuffer) || !bk::IsValid(svgVertexBuffer) || !bk::IsValid(statusVertexBuffer) || !bk::IsValid(dragVertexBuffer) ||
+            !bk::IsValid(backgroundTexture) || !bk::IsValid(svgTexture) || !bk::IsValid(statusTexture) || !bk::IsValid(dragTexture) ||
             !bk::IsValid(vertexShader) ||
             !bk::IsValid(fragmentShader) || !bk::IsValid(pipeline) ||
             !bk::IsValid(commandBuffer))
@@ -1221,6 +1444,64 @@ int main(int argc, char** argv)
         while (platform->IsRunning())
         {
             platform->PollEvents();
+            const bk::InputState input = platform->GetInput();
+            bk::TextInputStatus imeStatus = platform->GetTextInputStatus();
+
+            auto clampSquare = [&]() {
+                dragSquareX = std::clamp(dragSquareX, 0, dragLayerWidth - dragSquareSize);
+                dragSquareY = std::clamp(dragSquareY, 0, dragLayerHeight - dragSquareSize);
+            };
+
+            auto pointInSquare = [&](float px, float py) {
+                const float localX = px - static_cast<float>(dragLayerX);
+                const float localY = py - static_cast<float>(dragLayerY);
+                return localX >= static_cast<float>(dragSquareX) &&
+                    localY >= static_cast<float>(dragSquareY) &&
+                    localX < static_cast<float>(dragSquareX + dragSquareSize) &&
+                    localY < static_cast<float>(dragSquareY + dragSquareSize);
+            };
+
+            if (input.mouseLeftPressed && pointInSquare(input.mousePosition.x, input.mousePosition.y))
+            {
+                dragActive = true;
+                dragOffsetX = input.mousePosition.x - static_cast<float>(dragLayerX + dragSquareX);
+                dragOffsetY = input.mousePosition.y - static_cast<float>(dragLayerY + dragSquareY);
+            }
+            if (input.touchCount > 0 && !dragActive && pointInSquare(input.touchPoints[0].position.x, input.touchPoints[0].position.y))
+            {
+                dragActive = true;
+                dragOffsetX = input.touchPoints[0].position.x - static_cast<float>(dragLayerX + dragSquareX);
+                dragOffsetY = input.touchPoints[0].position.y - static_cast<float>(dragLayerY + dragSquareY);
+            }
+            if (dragActive && !input.mouseLeftDown && input.touchCount == 0)
+            {
+                dragActive = false;
+            }
+            if (dragActive)
+            {
+                if (input.touchCount > 0)
+                {
+                    dragSquareX = static_cast<int>(input.touchPoints[0].position.x - static_cast<float>(dragLayerX) - dragOffsetX);
+                    dragSquareY = static_cast<int>(input.touchPoints[0].position.y - static_cast<float>(dragLayerY) - dragOffsetY);
+                }
+                else
+                {
+                    dragSquareX = static_cast<int>(input.mousePosition.x - static_cast<float>(dragLayerX) - dragOffsetX);
+                    dragSquareY = static_cast<int>(input.mousePosition.y - static_cast<float>(dragLayerY) - dragOffsetY);
+                }
+                clampSquare();
+            }
+
+            if (input.keyPressed && std::strcmp(input.lastKeyEvent.name, "I") == 0 && platform->GetImeManager() != nullptr)
+            {
+                platform->GetImeManager()->OpenForText(
+                    [](std::string) {},
+                    "BeikUI IME",
+                    "Type something here",
+                    32,
+                    imeStatus.text);
+                imeStatus = platform->GetTextInputStatus();
+            }
 
             const auto now = std::chrono::steady_clock::now();
             const float elapsed = std::chrono::duration<float>(now - startTime).count();
@@ -1243,6 +1524,27 @@ int main(int argc, char** argv)
                 break;
             }
 
+            statusLayer = BuildStatusPanel(font, input, imeStatus);
+            dragLayer = BuildDraggableSquareLayer(dragLayerWidth, dragLayerHeight, dragSquareX, dragSquareY, dragSquareSize, dragActive);
+            if (!device->UpdateTexture(statusTexture, bk::TextureDesc{
+                static_cast<std::uint32_t>(statusLayer.width),
+                static_cast<std::uint32_t>(statusLayer.height),
+                statusLayer.pixels.data(),
+            }))
+            {
+                std::fprintf(stderr, "Failed to update status texture.\n");
+                break;
+            }
+            if (!device->UpdateTexture(dragTexture, bk::TextureDesc{
+                static_cast<std::uint32_t>(dragLayer.width),
+                static_cast<std::uint32_t>(dragLayer.height),
+                dragLayer.pixels.data(),
+            }))
+            {
+                std::fprintf(stderr, "Failed to update drag texture.\n");
+                break;
+            }
+
             device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.05F, 0.06F, 0.08F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
             device->BindPipeline(commandBuffer, pipeline);
@@ -1252,6 +1554,12 @@ int main(int argc, char** argv)
             device->BindVertexBuffer(commandBuffer, svgVertexBuffer);
             device->BindTexture(commandBuffer, svgTexture);
             device->Draw(commandBuffer, static_cast<std::uint32_t>(svgVertices.size()));
+            device->BindVertexBuffer(commandBuffer, statusVertexBuffer);
+            device->BindTexture(commandBuffer, statusTexture);
+            device->Draw(commandBuffer, static_cast<std::uint32_t>(statusVertices.size()));
+            device->BindVertexBuffer(commandBuffer, dragVertexBuffer);
+            device->BindTexture(commandBuffer, dragTexture);
+            device->Draw(commandBuffer, static_cast<std::uint32_t>(dragVertices.size()));
             device->EndCommandBuffer(commandBuffer);
             device->Submit(commandBuffer);
             device->EndFrame(swapchain);
@@ -1261,8 +1569,12 @@ int main(int argc, char** argv)
         device->DestroyPipeline(pipeline);
         device->DestroyShader(fragmentShader);
         device->DestroyShader(vertexShader);
+        device->DestroyTexture(dragTexture);
+        device->DestroyTexture(statusTexture);
         device->DestroyTexture(svgTexture);
         device->DestroyTexture(backgroundTexture);
+        device->DestroyBuffer(dragVertexBuffer);
+        device->DestroyBuffer(statusVertexBuffer);
         device->DestroyBuffer(svgVertexBuffer);
         device->DestroyBuffer(backgroundVertexBuffer);
         device->Shutdown();

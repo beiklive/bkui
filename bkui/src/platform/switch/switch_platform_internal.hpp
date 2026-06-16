@@ -12,8 +12,10 @@ namespace bk::sw
 bool InitAudio();
 void ShutdownAudio();
 
-bool InitIme();
+bool InitIme(ImeManager*& imeManager);
 void ShutdownIme();
+TextInputStatus GetTextInputStatus();
+void ResetTextInputStatus();
 
 bool InitVideo();
 void ShutdownVideo();
