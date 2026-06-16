@@ -6,8 +6,14 @@
 #include <bkui/platform/Font.hpp>
 #include <bkui/platform/Ime.hpp>
 #include <bkui/platform/Platform.hpp>
+#include <bkui/renderer/RenderCommand.hpp>
+#include <bkui/renderer/RenderQueue.hpp>
 #include <bkui/resource/FileSystem.hpp>
 #include <bkui/rhi/Device.hpp>
+#include <bkui/ui/Box.hpp>
+#include <bkui/ui/Button.hpp>
+#include <bkui/ui/Label.hpp>
+#include <bkui/ui/View.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>

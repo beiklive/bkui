@@ -8,8 +8,10 @@ file(
     BKUI_SRC
     CONFIGURE_DEPENDS
     src/core/*.cpp
+    src/renderer/*.cpp
     src/resource/*.cpp
     src/rhi/*.cpp
+    src/ui/*.cpp
 )
 
 if(BKUI_PLATFORM_SWITCH)
