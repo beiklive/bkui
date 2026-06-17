@@ -558,7 +558,7 @@ void RenderQueueToImage(Image& image, const FontResource& font, const bk::Render
 class MovingBox final : public bk::Box
 {
 public:
-    MovingBox(std::string title, const bk::Color& backgroundColor, bk::Vector2 size, bk::Vector2 velocity, const bk::Color& textColor)
+    MovingBox(std::string title, const bk::ColorRGBA& backgroundColor, bk::Vector2 size, bk::Vector2 velocity, const bk::ColorRGBA& textColor)
         : bk::Box(bk::BoxDirection::Vertical)
         , title_(std::move(title))
         , size_(size)
@@ -668,7 +668,7 @@ protected:
         const bk::Rect& frame = GetFrame();
         queue.PushRect(
             bk::Rect{frame.x + 6.0F, frame.y + 6.0F, std::max(0.0F, frame.width - 12.0F), 4.0F},
-            bk::Color{1.0F, 1.0F, 1.0F, 0.22F});
+            bk::ColorRGBA{1.0F, 1.0F, 1.0F, 0.22F});
         queue.PushText(
             bk::Rect{frame.x + 16.0F, frame.y + 18.0F, std::max(0.0F, frame.width - 32.0F), std::max(0.0F, frame.height - 36.0F)},
             title_,
@@ -690,7 +690,7 @@ private:
     std::string title_;
     bk::Vector2 size_{};
     bk::Vector2 velocity_{};
-    bk::Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
+    bk::ColorRGBA textColor_{1.0F, 1.0F, 1.0F, 1.0F};
     bk::Rect motionBounds_{};
 };
 
@@ -703,16 +703,16 @@ public:
 
         firstBox_ = std::make_shared<MovingBox>(
             "Box A",
-            bk::Color{0.19F, 0.52F, 0.96F, 1.0F},
+            bk::ColorRGBA{0.19F, 0.52F, 0.96F, 1.0F},
             bk::Vector2{180.0F, 120.0F},
             bk::Vector2{240.0F, 180.0F},
-            bk::Color{1.0F, 1.0F, 1.0F, 1.0F});
+            bk::ColorRGBA{1.0F, 1.0F, 1.0F, 1.0F});
         secondBox_ = std::make_shared<MovingBox>(
             "Box B",
-            bk::Color{0.98F, 0.52F, 0.24F, 1.0F},
+            bk::ColorRGBA{0.98F, 0.52F, 0.24F, 1.0F},
             bk::Vector2{220.0F, 140.0F},
             bk::Vector2{-210.0F, 150.0F},
-            bk::Color{0.08F, 0.12F, 0.18F, 1.0F});
+            bk::ColorRGBA{0.08F, 0.12F, 0.18F, 1.0F});
 
         AddChild(firstBox_);
         AddChild(secondBox_);
@@ -772,18 +772,18 @@ protected:
 private:
     void DrawStaticSelf(bk::RenderQueue& queue) const
     {
-        queue.PushRect(frame_, bk::Color{0.08F, 0.11F, 0.16F, 1.0F});
+        queue.PushRect(frame_, bk::ColorRGBA{0.08F, 0.11F, 0.16F, 1.0F});
         queue.PushRect(
             bk::Rect{frame_.x + 1.0F, frame_.y + 1.0F, std::max(0.0F, frame_.width - 2.0F), std::max(0.0F, frame_.height - 2.0F)},
-            bk::Color{0.11F, 0.15F, 0.22F, 1.0F});
+            bk::ColorRGBA{0.11F, 0.15F, 0.22F, 1.0F});
         queue.PushRect(
             bk::Rect{frame_.x, frame_.y, frame_.width, 44.0F},
-            bk::Color{0.15F, 0.20F, 0.29F, 1.0F});
+            bk::ColorRGBA{0.15F, 0.20F, 0.29F, 1.0F});
         queue.PushText(
             bk::Rect{frame_.x + 20.0F, frame_.y + 12.0F, frame_.width - 40.0F, 24.0F},
             "Stage / Moving Boxes",
             24.0F,
-            bk::Color{0.96F, 0.97F, 0.99F, 1.0F});
+            bk::ColorRGBA{0.96F, 0.97F, 0.99F, 1.0F});
     }
     std::shared_ptr<MovingBox> firstBox_;
     std::shared_ptr<MovingBox> secondBox_;
@@ -803,39 +803,39 @@ public:
         infoPanel_->SetName("InfoPanel");
         infoPanel_->SetSpacing(12.0F);
         infoPanel_->SetDrawBackground(true);
-        infoPanel_->SetBackgroundColor(bk::Color{0.96F, 0.97F, 0.99F, 1.0F});
+        infoPanel_->SetBackgroundColor(bk::ColorRGBA{0.96F, 0.97F, 0.99F, 1.0F});
 
         titleLabel_ = std::make_shared<bk::Label>("BeikUI Main Loop Demo");
         titleLabel_->SetFontSize(30.0F);
-        titleLabel_->SetTextColor(bk::Color{0.09F, 0.12F, 0.18F, 1.0F});
+        titleLabel_->SetTextColor(bk::ColorRGBA{0.09F, 0.12F, 0.18F, 1.0F});
 
         subtitleLabel_ = std::make_shared<bk::Label>("Application / Logger / Frame / Draw / Page Tree");
         subtitleLabel_->SetFontSize(18.0F);
-        subtitleLabel_->SetTextColor(bk::Color{0.36F, 0.42F, 0.49F, 1.0F});
+        subtitleLabel_->SetTextColor(bk::ColorRGBA{0.36F, 0.42F, 0.49F, 1.0F});
 
         frameLabel_ = std::make_shared<bk::Label>("Frame: 0");
         frameLabel_->SetFontSize(20.0F);
-        frameLabel_->SetTextColor(bk::Color{0.12F, 0.18F, 0.26F, 1.0F});
+        frameLabel_->SetTextColor(bk::ColorRGBA{0.12F, 0.18F, 0.26F, 1.0F});
 
         inputLabel_ = std::make_shared<bk::Label>("Input: idle");
         inputLabel_->SetFontSize(18.0F);
-        inputLabel_->SetTextColor(bk::Color{0.21F, 0.26F, 0.32F, 1.0F});
+        inputLabel_->SetTextColor(bk::ColorRGBA{0.21F, 0.26F, 0.32F, 1.0F});
 
         firstBoxLabel_ = std::make_shared<bk::Label>("Box A");
         firstBoxLabel_->SetFontSize(18.0F);
-        firstBoxLabel_->SetTextColor(bk::Color{0.19F, 0.32F, 0.55F, 1.0F});
+        firstBoxLabel_->SetTextColor(bk::ColorRGBA{0.19F, 0.32F, 0.55F, 1.0F});
 
         secondBoxLabel_ = std::make_shared<bk::Label>("Box B");
         secondBoxLabel_->SetFontSize(18.0F);
-        secondBoxLabel_->SetTextColor(bk::Color{0.55F, 0.28F, 0.12F, 1.0F});
+        secondBoxLabel_->SetTextColor(bk::ColorRGBA{0.55F, 0.28F, 0.12F, 1.0F});
 
         pipelineButton_ = std::make_shared<bk::Button>("Application::RunFrame()");
         pipelineButton_->SetFontSize(18.0F);
-        pipelineButton_->SetBackgroundColor(bk::Color{0.18F, 0.45F, 0.90F, 1.0F});
+        pipelineButton_->SetBackgroundColor(bk::ColorRGBA{0.18F, 0.45F, 0.90F, 1.0F});
 
         loggerButton_ = std::make_shared<bk::Button>("Logger -> console + file");
         loggerButton_->SetFontSize(18.0F);
-        loggerButton_->SetBackgroundColor(bk::Color{0.13F, 0.63F, 0.55F, 1.0F});
+        loggerButton_->SetBackgroundColor(bk::ColorRGBA{0.13F, 0.63F, 0.55F, 1.0F});
 
         infoPanel_->AddChild(titleLabel_);
         infoPanel_->AddChild(subtitleLabel_);
@@ -898,7 +898,7 @@ public:
     void DrawStatic(bk::RenderQueue& queue) const
     {
         Draw(queue);
-        queue.PushRect(infoPanel_->GetFrame(), bk::Color{0.96F, 0.97F, 0.99F, 1.0F});
+        queue.PushRect(infoPanel_->GetFrame(), bk::ColorRGBA{0.96F, 0.97F, 0.99F, 1.0F});
         stageView_->DrawStatic(queue);
     }
 
@@ -930,10 +930,10 @@ public:
 protected:
     void Draw(bk::RenderQueue& queue) const override
     {
-        queue.PushRect(frame_, bk::Color{0.05F, 0.07F, 0.10F, 1.0F});
+        queue.PushRect(frame_, bk::ColorRGBA{0.05F, 0.07F, 0.10F, 1.0F});
         queue.PushRect(
             bk::Rect{frame_.x, frame_.y, frame_.width, 6.0F},
-            bk::Color{0.15F, 0.53F, 0.97F, 1.0F});
+            bk::ColorRGBA{0.15F, 0.53F, 0.97F, 1.0F});
     }
 
 private:
@@ -1089,7 +1089,7 @@ int main(int argc, char** argv)
                 break;
             }
 
-            device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.04F, 0.05F, 0.08F, 1.0F}});
+            device->BeginFrame(swapchain, bk::RenderPassDesc{bk::ColorRGBA{0.04F, 0.05F, 0.08F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
             if (!renderer.Render(commandBuffer, app.GetRenderQueue(), windowSize))
             {

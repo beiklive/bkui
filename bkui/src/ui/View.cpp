@@ -149,12 +149,12 @@ bool View::HasFocus() const
     return focused_;
 }
 
-void View::SetBackgroundColor(const Color& color)
+void View::SetBackgroundColor(const ColorRGBA& color)
 {
     backgroundColor_ = color;
 }
 
-const Color& View::GetBackgroundColor() const
+const ColorRGBA& View::GetBackgroundColor() const
 {
     return backgroundColor_;
 }
@@ -216,12 +216,12 @@ const Vector2& View::GetShadowOffset() const
     return shadow_.offset;
 }
 
-void View::SetShadowColor(const Color& color)
+void View::SetShadowColor(const ColorRGBA& color)
 {
     shadow_.color = color;
 }
 
-const Color& View::GetShadowColor() const
+const ColorRGBA& View::GetShadowColor() const
 {
     return shadow_.color;
 }
@@ -269,7 +269,7 @@ float View::GetFocusHighlightCornerRadius() const
     return focusHighlightStyle_.cornerRadius;
 }
 
-void View::SetFocusHighlightColors(const Color& color1, const Color& color2)
+void View::SetFocusHighlightColors(const ColorRGBA& color1, const ColorRGBA& color2)
 {
     focusHighlightStyle_.color1 = color1;
     focusHighlightStyle_.color2 = color2;
@@ -1019,7 +1019,7 @@ void View::DrawShadow(RenderQueue& queue) const
         const float t = static_cast<float>(layer + 1) / static_cast<float>(layers);
         const float expansion = spread + blurRadius * t;
         const float alphaScale = (1.0F - (static_cast<float>(layer) / static_cast<float>(layers))) / static_cast<float>(layers);
-        Color color = shadow_.color;
+        ColorRGBA color = shadow_.color;
         color.a *= alphaScale * 1.35F;
 
         const Rect shadowRect{
@@ -1049,7 +1049,7 @@ void View::DrawDebugWireframe(RenderQueue& queue) const
         return;
     }
 
-    const auto pushDiagonalPair = [&](const Rect& rect, const Color& color) {
+    const auto pushDiagonalPair = [&](const Rect& rect, const ColorRGBA& color) {
         if (rect.width <= 0.0F || rect.height <= 0.0F)
         {
             return;
@@ -1065,9 +1065,9 @@ void View::DrawDebugWireframe(RenderQueue& queue) const
             color);
     };
 
-    pushDiagonalPair(GetMarginFrame(), Color{1.0F, 0.18F, 0.18F, 0.92F});
-    pushDiagonalPair(frame_, Color{0.22F, 0.48F, 1.0F, 0.92F});
-    pushDiagonalPair(GetContentFrame(), Color{1.0F, 0.84F, 0.18F, 0.92F});
+    pushDiagonalPair(GetMarginFrame(), ColorRGBA{1.0F, 0.18F, 0.18F, 0.92F});
+    pushDiagonalPair(frame_, ColorRGBA{0.22F, 0.48F, 1.0F, 0.92F});
+    pushDiagonalPair(GetContentFrame(), ColorRGBA{1.0F, 0.84F, 0.18F, 0.92F});
 }
 
 float View::NormalizePercentage(float percentage)

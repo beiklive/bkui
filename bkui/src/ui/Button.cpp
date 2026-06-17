@@ -12,7 +12,7 @@ Button::Button(std::string text)
 {
     SetFocusable(true);
     SetDrawBackground(true);
-    SetBackgroundColor(Color{0.18F, 0.45F, 0.90F, 1.0F});
+    SetBackgroundColor(ColorRGBA{0.18F, 0.45F, 0.90F, 1.0F});
     SetPadding(10.0F, 14.0F);
     SetMinHeight(44.0F);
 }
@@ -28,22 +28,22 @@ const std::string& Button::GetText() const
     return text_;
 }
 
-void Button::SetBackgroundColor(const Color& color)
+void Button::SetBackgroundColor(const ColorRGBA& color)
 {
     Box::SetBackgroundColor(color);
 }
 
-const Color& Button::GetBackgroundColor() const
+const ColorRGBA& Button::GetBackgroundColor() const
 {
     return Box::GetBackgroundColor();
 }
 
-void Button::SetTextColor(const Color& color)
+void Button::SetTextColor(const ColorRGBA& color)
 {
     textColor_ = color;
 }
 
-const Color& Button::GetTextColor() const
+const ColorRGBA& Button::GetTextColor() const
 {
     return textColor_;
 }

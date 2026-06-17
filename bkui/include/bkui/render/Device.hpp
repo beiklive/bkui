@@ -135,7 +135,7 @@ struct PipelineDesc
 /// 一次渲染通道的基础参数。
 struct RenderPassDesc
 {
-    Color clearColor;
+    ColorRGBA clearColor;
 };
 
 /// 渲染硬件接口抽象，屏蔽不同图形后端的实现差异。

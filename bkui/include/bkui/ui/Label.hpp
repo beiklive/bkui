@@ -25,9 +25,9 @@ public:
     [[nodiscard]] float GetFontSize() const;
 
     /// 设置文本颜色。
-    void SetTextColor(const Color& color);
+    void SetTextColor(const ColorRGBA& color);
     /// 获取文本颜色。
-    [[nodiscard]] const Color& GetTextColor() const;
+    [[nodiscard]] const ColorRGBA& GetTextColor() const;
 
     /// 估算标签占用尺寸。
     Size Measure(const Size& available) const override;
@@ -37,7 +37,7 @@ public:
 private:
     std::string text_;
     float fontSize_ = 20.0F;
-    Color textColor_{0.1F, 0.1F, 0.1F, 1.0F};
+    ColorRGBA textColor_{0.1F, 0.1F, 0.1F, 1.0F};
 };
 
 }

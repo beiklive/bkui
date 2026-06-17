@@ -25,9 +25,9 @@ public:
     [[nodiscard]] float GetSpacing() const;
 
     /// 设置背景颜色。
-    void SetBackgroundColor(const Color& color);
+    void SetBackgroundColor(const ColorRGBA& color);
     /// 获取背景颜色。
-    [[nodiscard]] const Color& GetBackgroundColor() const;
+    [[nodiscard]] const ColorRGBA& GetBackgroundColor() const;
 
     /// 控制是否绘制背景。
     void SetDrawBackground(bool enabled);

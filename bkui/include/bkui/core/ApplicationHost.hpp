@@ -18,7 +18,7 @@ struct ApplicationHostDesc
     ApplicationDesc application{};
     WindowDesc window{};
     Vector2 logicalSize{};
-    Color clearColor{0.0F, 0.0F, 0.0F, 1.0F};
+    ColorRGBA clearColor{0.0F, 0.0F, 0.0F, 1.0F};
 };
 
 /// 托管 Application、Platform、Device 和 RenderQueueRenderer 的默认运行时。
@@ -68,10 +68,10 @@ public:
     [[nodiscard]] Vector2 GetLogicalSize() const;
 
     /// 设置主渲染通道清屏色。
-    void SetClearColor(const Color& color);
+    void SetClearColor(const ColorRGBA& color);
 
     /// 获取主渲染通道清屏色。
-    [[nodiscard]] const Color& GetClearColor() const;
+    [[nodiscard]] const ColorRGBA& GetClearColor() const;
 
     /// 获取每帧应用更新前事件。
     [[nodiscard]] FrameEvent& OnFrameBegin();
@@ -98,7 +98,7 @@ private:
     SwapchainHandle swapchain_{};
     Vector2 windowSize_{};
     Vector2 logicalSize_{};
-    Color clearColor_{0.0F, 0.0F, 0.0F, 1.0F};
+    ColorRGBA clearColor_{0.0F, 0.0F, 0.0F, 1.0F};
     bool initialized_ = false;
     FrameEvent onFrameBegin_{};
     FrameEvent onFrameEnd_{};

@@ -777,7 +777,7 @@ private:
     std::array<DkVtxBufferState, 1> vertexBufferState_{};
     DkCmdList renderCmdList_{};
     std::uint32_t currentFramebuffer_ = 0;
-    Color currentClearColor_{};
+    ColorRGBA currentClearColor_{};
     float framebufferWidth_ = 1280.0f;
     float framebufferHeight_ = 720.0f;
 };

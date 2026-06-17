@@ -1551,7 +1551,7 @@ int main(int argc, char** argv)
                 break;
             }
 
-            device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.05F, 0.06F, 0.08F, 1.0F}});
+            device->BeginFrame(swapchain, bk::RenderPassDesc{bk::ColorRGBA{0.05F, 0.06F, 0.08F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
             device->BindPipeline(commandBuffer, pipeline);
             device->BindVertexBuffer(commandBuffer, backgroundVertexBuffer);

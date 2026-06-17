@@ -33,7 +33,7 @@ struct EdgeInsets
 struct ShadowStyle
 {
     Vector2 offset{};
-    Color color{0.0F, 0.0F, 0.0F, 0.24F};
+    ColorRGBA color{0.0F, 0.0F, 0.0F, 0.24F};
     float blurRadius = 0.0F;
     float spread = 0.0F;
     bool enabled = false;
@@ -43,8 +43,8 @@ struct ShadowStyle
 /// 每个 View 负责声明自己的聚焦框外观。
 struct FocusHighlightStyle
 {
-    Color color1{0.34F, 0.76F, 1.0F, 1.0F};
-    Color color2{0.76F, 0.52F, 1.0F, 1.0F};
+    ColorRGBA color1{0.34F, 0.76F, 1.0F, 1.0F};
+    ColorRGBA color2{0.76F, 0.52F, 1.0F, 1.0F};
     float cornerRadius = -1.0F;
     float inset = 6.0F;
     float thickness = 3.0F;
@@ -102,9 +102,9 @@ public:
     [[nodiscard]] bool HasFocus() const;
 
     /// 设置背景颜色。
-    void SetBackgroundColor(const Color& color);
+    void SetBackgroundColor(const ColorRGBA& color);
     /// 获取背景颜色。
-    [[nodiscard]] const Color& GetBackgroundColor() const;
+    [[nodiscard]] const ColorRGBA& GetBackgroundColor() const;
     /// 控制是否绘制背景。
     void SetDrawBackground(bool enabled);
     /// 查询当前是否绘制背景。
@@ -127,9 +127,9 @@ public:
     /// 获取阴影偏移。
     [[nodiscard]] const Vector2& GetShadowOffset() const;
     /// 设置阴影颜色。
-    void SetShadowColor(const Color& color);
+    void SetShadowColor(const ColorRGBA& color);
     /// 获取阴影颜色。
-    [[nodiscard]] const Color& GetShadowColor() const;
+    [[nodiscard]] const ColorRGBA& GetShadowColor() const;
     /// 设置阴影模糊半径。
     void SetShadowBlurRadius(float radius);
     /// 获取阴影模糊半径。
@@ -148,7 +148,7 @@ public:
     /// 获取聚焦框圆角半径。
     [[nodiscard]] float GetFocusHighlightCornerRadius() const;
     /// 设置聚焦框高亮颜色。
-    void SetFocusHighlightColors(const Color& color1, const Color& color2);
+    void SetFocusHighlightColors(const ColorRGBA& color1, const ColorRGBA& color2);
 
     /// 设置视图外边距。
     void SetMargin(const EdgeInsets& margin);
@@ -386,7 +386,7 @@ protected:
     bool focusable_ = false;
     bool focused_ = false;
     int zIndex_ = 0;
-    Color backgroundColor_{0.0F, 0.0F, 0.0F, 0.0F};
+    ColorRGBA backgroundColor_{0.0F, 0.0F, 0.0F, 0.0F};
     bool drawBackground_ = false;
     float cornerRadius_ = 0.0F;
     ShadowStyle shadow_{};

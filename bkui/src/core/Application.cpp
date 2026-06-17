@@ -67,7 +67,7 @@ float Approach(float current, float target, float deltaSeconds, float speed)
     return current + (target - current) * factor;
 }
 
-Color HsvToRgb(float hue, float saturation, float value, float alpha)
+ColorRGBA HsvToRgb(float hue, float saturation, float value, float alpha)
 {
     const float wrappedHue = hue - std::floor(hue);
     const float scaledHue = wrappedHue * 6.0F;
@@ -110,7 +110,7 @@ Color HsvToRgb(float hue, float saturation, float value, float alpha)
         blue = x;
     }
 
-    return Color{
+    return ColorRGBA{
         red + match,
         green + match,
         blue + match,
@@ -118,10 +118,10 @@ Color HsvToRgb(float hue, float saturation, float value, float alpha)
     };
 }
 
-Color LerpColor(const Color& from, const Color& to, float t)
+ColorRGBA LerpColor(const ColorRGBA& from, const ColorRGBA& to, float t)
 {
     const float clamped = std::clamp(t, 0.0F, 1.0F);
-    return Color{
+    return ColorRGBA{
         from.r + (to.r - from.r) * clamped,
         from.g + (to.g - from.g) * clamped,
         from.b + (to.b - from.b) * clamped,
@@ -413,6 +413,7 @@ void Application::Shutdown()
     bklog.info("Application shutting down.");
     onShutdown_.Emit(*this);
     ResetState();
+    bk::FileSystem::Shutdown();
     bklog.Shutdown();
 }
 
@@ -839,22 +840,22 @@ bool Application::IsPreservingInactiveFocusHighlights() const
     return preserveInactiveFocusHighlights_;
 }
 
-void Application::SetFocusHighlightColor1(const Color& color)
+void Application::SetFocusHighlightColor1(const ColorRGBA& color)
 {
     defaultFocusHighlightStyle_.color1 = color;
 }
 
-const Color& Application::GetFocusHighlightColor1() const
+const ColorRGBA& Application::GetFocusHighlightColor1() const
 {
     return defaultFocusHighlightStyle_.color1;
 }
 
-void Application::SetFocusHighlightColor2(const Color& color)
+void Application::SetFocusHighlightColor2(const ColorRGBA& color)
 {
     defaultFocusHighlightStyle_.color2 = color;
 }
 
-const Color& Application::GetFocusHighlightColor2() const
+const ColorRGBA& Application::GetFocusHighlightColor2() const
 {
     return defaultFocusHighlightStyle_.color2;
 }
@@ -1270,7 +1271,7 @@ void Application::DrawFocusHighlightState(RenderQueue& queue, const FocusHighlig
             return;
         }
 
-        const Color shadowColor{0.0F, 0.0F, 0.0F, alphaScale};
+        const ColorRGBA shadowColor{0.0F, 0.0F, 0.0F, alphaScale};
         for (std::size_t index = 0; index < path.size(); ++index)
         {
             const std::size_t nextIndex = (index + 1) % path.size();
@@ -1289,10 +1290,10 @@ void Application::DrawFocusHighlightState(RenderQueue& queue, const FocusHighlig
         const float gradientY = (std::sin(state.pulseTime / kFocusHighlightTravelSpeed / 3.0F) + 1.0F) * 0.5F;
         const float colorT = (std::sin(state.pulseTime * kFocusHighlightPulseSpeed) + 1.0F) * 0.5F;
 
-        const Color highlight1 = state.style.color1;
-        const Color highlight2 = state.style.color2;
-        const Color pulseColor = LerpColor(highlight2, highlight1, colorT);
-        const Color glowColor = LerpColor(highlight1, highlight2, 0.35F);
+        const ColorRGBA highlight1 = state.style.color1;
+        const ColorRGBA highlight2 = state.style.color2;
+        const ColorRGBA pulseColor = LerpColor(highlight2, highlight1, colorT);
+        const ColorRGBA glowColor = LerpColor(highlight1, highlight2, 0.35F);
 
         const float glowPosition1 = gradientX * totalLength;
         const float glowPosition2 = (1.0F - gradientY) * totalLength;
@@ -1318,7 +1319,7 @@ void Application::DrawFocusHighlightState(RenderQueue& queue, const FocusHighlig
             const float glowWeight1 = std::clamp(1.0F - distance1 / glowSpan, 0.0F, 1.0F);
             const float glowWeight2 = std::clamp(1.0F - distance2 / glowSpan, 0.0F, 1.0F);
             const float glowWeight = std::max(glowWeight1, glowWeight2);
-            Color segmentColor = LerpColor(
+            ColorRGBA segmentColor = LerpColor(
                 pulseColor,
                 glowColor,
                 0.25F + glowWeight * 0.75F);

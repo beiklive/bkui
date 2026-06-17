@@ -431,7 +431,7 @@ bool PointInRect(float x, float y, const bk::Rect& rect)
 class PerfBox final : public bk::Box
 {
 public:
-    PerfBox(std::string name, bk::Vector2 size, bk::Vector2 velocity, bk::Color color)
+    PerfBox(std::string name, bk::Vector2 size, bk::Vector2 velocity, bk::ColorRGBA color)
         : bk::Box(bk::BoxDirection::Vertical)
         , name_(std::move(name))
         , size_(size)
@@ -492,12 +492,12 @@ protected:
         const bk::Rect& frame = GetFrame();
         queue.PushRect(
             bk::Rect{frame.x + 3.0F, frame.y + 3.0F, std::max(0.0F, frame.width - 6.0F), 3.0F},
-            bk::Color{1.0F, 1.0F, 1.0F, 0.22F});
+            bk::ColorRGBA{1.0F, 1.0F, 1.0F, 0.22F});
         queue.PushText(
             bk::Rect{frame.x + 8.0F, frame.y + 10.0F, std::max(0.0F, frame.width - 16.0F), std::max(0.0F, frame.height - 20.0F)},
             name_,
             12.0F,
-            bk::Color{1.0F, 1.0F, 1.0F, 1.0F});
+            bk::ColorRGBA{1.0F, 1.0F, 1.0F, 1.0F});
     }
 
 private:
@@ -537,7 +537,7 @@ public:
                 std::to_string(index),
                 bk::Vector2{width, height},
                 bk::Vector2{vx, vy},
-                bk::Color{colorDist(rng), colorDist(rng), colorDist(rng), 1.0F});
+                bk::ColorRGBA{colorDist(rng), colorDist(rng), colorDist(rng), 1.0F});
             boxes_.push_back(box);
             AddChild(box);
         }
@@ -618,38 +618,38 @@ public:
 protected:
     void Draw(bk::RenderQueue& queue) const override
     {
-        queue.PushRect(frame_, bk::Color{0.04F, 0.05F, 0.08F, 1.0F});
+        queue.PushRect(frame_, bk::ColorRGBA{0.04F, 0.05F, 0.08F, 1.0F});
         queue.PushRect(
             bk::Rect{frame_.x, frame_.y, frame_.width, 8.0F},
-            bk::Color{0.16F, 0.56F, 0.98F, 1.0F});
+            bk::ColorRGBA{0.16F, 0.56F, 0.98F, 1.0F});
 
         queue.PushRect(
             bk::Rect{18.0F, 18.0F, 332.0F, 170.0F},
-            bk::Color{0.10F, 0.13F, 0.19F, 0.96F});
-        queue.PushText(bk::Rect{32.0F, 30.0F, 300.0F, 28.0F}, "Performance HUD", 24.0F, bk::Color{0.96F, 0.97F, 0.99F, 1.0F});
-        queue.PushText(bk::Rect{32.0F, 64.0F, 300.0F, 20.0F}, "Mode: " + ModeName(mode_), 18.0F, bk::Color{0.72F, 0.84F, 1.0F, 1.0F});
-        queue.PushText(bk::Rect{32.0F, 88.0F, 300.0F, 20.0F}, "FPS: " + [&] { std::ostringstream s; s << std::fixed << std::setprecision(1) << stats_.fps; return s.str(); }(), 18.0F, bk::Color{0.84F, 0.95F, 0.84F, 1.0F});
-        queue.PushText(bk::Rect{32.0F, 112.0F, 300.0F, 20.0F}, "CPU ms: " + [&] { std::ostringstream s; s << std::fixed << std::setprecision(2) << stats_.avgCpuMs; return s.str(); }(), 18.0F, bk::Color{0.97F, 0.88F, 0.72F, 1.0F});
-        queue.PushText(bk::Rect{32.0F, 136.0F, 300.0F, 20.0F}, "Present ms: " + [&] { std::ostringstream s; s << std::fixed << std::setprecision(2) << stats_.avgPresentMs; return s.str(); }(), 18.0F, bk::Color{0.97F, 0.78F, 0.76F, 1.0F});
-        queue.PushText(bk::Rect{32.0F, 160.0F, 300.0F, 20.0F}, "Boxes: " + std::to_string(stats_.boxCount) + "  Commands: " + std::to_string(stats_.commandCount), 18.0F, bk::Color{0.84F, 0.85F, 0.90F, 1.0F});
+            bk::ColorRGBA{0.10F, 0.13F, 0.19F, 0.96F});
+        queue.PushText(bk::Rect{32.0F, 30.0F, 300.0F, 28.0F}, "Performance HUD", 24.0F, bk::ColorRGBA{0.96F, 0.97F, 0.99F, 1.0F});
+        queue.PushText(bk::Rect{32.0F, 64.0F, 300.0F, 20.0F}, "Mode: " + ModeName(mode_), 18.0F, bk::ColorRGBA{0.72F, 0.84F, 1.0F, 1.0F});
+        queue.PushText(bk::Rect{32.0F, 88.0F, 300.0F, 20.0F}, "FPS: " + [&] { std::ostringstream s; s << std::fixed << std::setprecision(1) << stats_.fps; return s.str(); }(), 18.0F, bk::ColorRGBA{0.84F, 0.95F, 0.84F, 1.0F});
+        queue.PushText(bk::Rect{32.0F, 112.0F, 300.0F, 20.0F}, "CPU ms: " + [&] { std::ostringstream s; s << std::fixed << std::setprecision(2) << stats_.avgCpuMs; return s.str(); }(), 18.0F, bk::ColorRGBA{0.97F, 0.88F, 0.72F, 1.0F});
+        queue.PushText(bk::Rect{32.0F, 136.0F, 300.0F, 20.0F}, "Present ms: " + [&] { std::ostringstream s; s << std::fixed << std::setprecision(2) << stats_.avgPresentMs; return s.str(); }(), 18.0F, bk::ColorRGBA{0.97F, 0.78F, 0.76F, 1.0F});
+        queue.PushText(bk::Rect{32.0F, 160.0F, 300.0F, 20.0F}, "Boxes: " + std::to_string(stats_.boxCount) + "  Commands: " + std::to_string(stats_.commandCount), 18.0F, bk::ColorRGBA{0.84F, 0.85F, 0.90F, 1.0F});
 
         queue.PushRect(
             bk::Rect{frame_.width - 174.0F, 22.0F, 150.0F, 56.0F},
-            bk::Color{0.17F, 0.47F, 0.91F, 1.0F});
+            bk::ColorRGBA{0.17F, 0.47F, 0.91F, 1.0F});
         queue.PushText(
             bk::Rect{frame_.width - 144.0F, 40.0F, 120.0F, 20.0F},
             "+ 10 Boxes",
             20.0F,
-            bk::Color{1.0F, 1.0F, 1.0F, 1.0F});
+            bk::ColorRGBA{1.0F, 1.0F, 1.0F, 1.0F});
 
         queue.PushRect(
             bk::Rect{frame_.width - 174.0F, 92.0F, 150.0F, 56.0F},
-            bk::Color{0.89F, 0.40F, 0.24F, 1.0F});
+            bk::ColorRGBA{0.89F, 0.40F, 0.24F, 1.0F});
         queue.PushText(
             bk::Rect{frame_.width - 147.0F, 110.0F, 120.0F, 20.0F},
             "- 10 Boxes",
             20.0F,
-            bk::Color{1.0F, 1.0F, 1.0F, 1.0F});
+            bk::ColorRGBA{1.0F, 1.0F, 1.0F, 1.0F});
     }
 
 private:
@@ -826,7 +826,7 @@ int main(int argc, char** argv)
             }
 
             const auto presentStart = Clock::now();
-            device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.03F, 0.04F, 0.06F, 1.0F}});
+            device->BeginFrame(swapchain, bk::RenderPassDesc{bk::ColorRGBA{0.03F, 0.04F, 0.06F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
             if (!renderer.Render(commandBuffer, app.GetRenderQueue(), windowSize))
             {

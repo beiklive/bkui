@@ -28,7 +28,7 @@ struct ApplicationDesc
     LoggerDesc logger{};
     WindowDesc window{};
     Vector2 logicalSize{};
-    Color clearColor{0.0F, 0.0F, 0.0F, 1.0F};
+    ColorRGBA clearColor{0.0F, 0.0F, 0.0F, 1.0F};
     bool autoResizeRootViews = true;
 };
 
@@ -226,16 +226,16 @@ public:
     [[nodiscard]] bool IsFocusHighlightMotionEnabled() const;
 
     /// 设置默认聚焦框高亮主色 1。已弃用：请在 View 上设置聚焦框样式。
-    void SetFocusHighlightColor1(const Color& color);
+    void SetFocusHighlightColor1(const ColorRGBA& color);
 
     /// 获取默认聚焦框高亮主色 1。已弃用：请在 View 上获取聚焦框样式。
-    [[nodiscard]] const Color& GetFocusHighlightColor1() const;
+    [[nodiscard]] const ColorRGBA& GetFocusHighlightColor1() const;
 
     /// 设置默认聚焦框高亮主色 2。已弃用：请在 View 上设置聚焦框样式。
-    void SetFocusHighlightColor2(const Color& color);
+    void SetFocusHighlightColor2(const ColorRGBA& color);
 
     /// 获取默认聚焦框高亮主色 2。已弃用：请在 View 上获取聚焦框样式。
-    [[nodiscard]] const Color& GetFocusHighlightColor2() const;
+    [[nodiscard]] const ColorRGBA& GetFocusHighlightColor2() const;
 
     /// 设置是否保留非活动顶层 View 的聚焦框。
     void SetPreserveInactiveFocusHighlights(bool enabled);

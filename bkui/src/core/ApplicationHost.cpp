@@ -89,7 +89,7 @@ void ApplicationHost::Shutdown()
     initialized_ = false;
     windowSize_ = {};
     logicalSize_ = {};
-    clearColor_ = Color{0.0F, 0.0F, 0.0F, 1.0F};
+    clearColor_ = ColorRGBA{0.0F, 0.0F, 0.0F, 1.0F};
     swapchain_ = {};
 }
 
@@ -251,12 +251,12 @@ Vector2 ApplicationHost::GetLogicalSize() const
     return application_.GetLogicalSize();
 }
 
-void ApplicationHost::SetClearColor(const Color& color)
+void ApplicationHost::SetClearColor(const ColorRGBA& color)
 {
     clearColor_ = color;
 }
 
-const Color& ApplicationHost::GetClearColor() const
+const ColorRGBA& ApplicationHost::GetClearColor() const
 {
     return clearColor_;
 }

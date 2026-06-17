@@ -850,7 +850,7 @@ private:
         };
     }
 
-    void PushQuad(const RectF& rect, const Color& color, TextureHandle texture, Vector2 logicalSize, float u0, float v0, float u1, float v1)
+    void PushQuad(const RectF& rect, const ColorRGBA& color, TextureHandle texture, Vector2 logicalSize, float u0, float v0, float u1, float v1)
     {
         const Vector2 topLeft = ToClipSpace(rect.x, rect.y, logicalSize);
         const Vector2 bottomLeft = ToClipSpace(rect.x, rect.y + rect.height, logicalSize);
@@ -874,7 +874,7 @@ private:
         AppendBatch(texture, 6);
     }
 
-    void PushTriangle(const Vector2& p0, const Vector2& p1, const Vector2& p2, const Color& color, TextureHandle texture)
+    void PushTriangle(const Vector2& p0, const Vector2& p1, const Vector2& p2, const ColorRGBA& color, TextureHandle texture)
     {
         const auto pushVertex = [&](const Vector2& position) {
             const Vector2 clipPos = ToClipSpace(position.x, position.y, currentLogicalSize);
@@ -1023,7 +1023,7 @@ private:
         points.swap(output);
     }
 
-    void PushClippedTriangle(const Vector2& p0, const Vector2& p1, const Vector2& p2, const Color& color, const RectF& clip)
+    void PushClippedTriangle(const Vector2& p0, const Vector2& p1, const Vector2& p2, const ColorRGBA& color, const RectF& clip)
     {
         std::vector<Vector2> polygon = {p0, p1, p2};
         ClipPolygonAgainstLeft(polygon, clip.x);
@@ -1041,7 +1041,7 @@ private:
         }
     }
 
-    void EmitRect(const Rect& rect, const Color& color, const RectF& clip)
+    void EmitRect(const Rect& rect, const ColorRGBA& color, const RectF& clip)
     {
         const RectF clipped = IntersectRect(clip, RectF{rect.x, rect.y, rect.width, rect.height});
         if (!IsValidRect(clipped))
@@ -1052,7 +1052,7 @@ private:
         PushQuad(clipped, color, whiteTexture, currentLogicalSize, 0.0F, 0.0F, 1.0F, 1.0F);
     }
 
-    void EmitRoundedRect(const Rect& rect, const Color& color, float cornerRadius, const RectF& clip)
+    void EmitRoundedRect(const Rect& rect, const ColorRGBA& color, float cornerRadius, const RectF& clip)
     {
         const RectF bounds{rect.x, rect.y, rect.width, rect.height};
         const RectF clippedBounds = IntersectRect(bounds, clip);

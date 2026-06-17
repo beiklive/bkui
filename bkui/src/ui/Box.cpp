@@ -22,13 +22,13 @@ float Box::GetSpacing() const
     return spacing_;
 }
 
-void Box::SetBackgroundColor(const Color& color)
+void Box::SetBackgroundColor(const ColorRGBA& color)
 {
     View::SetBackgroundColor(color);
     View::SetDrawBackground(true);
 }
 
-const Color& Box::GetBackgroundColor() const
+const ColorRGBA& Box::GetBackgroundColor() const
 {
     return View::GetBackgroundColor();
 }

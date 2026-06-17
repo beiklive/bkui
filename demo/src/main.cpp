@@ -85,7 +85,7 @@ public:
         SetShadowOffset(0.0F, 8.0F);
         SetShadowBlurRadius(14.0F);
         SetShadowSpread(2.0F);
-        SetShadowColor(bk::Color{0.0F, 0.0F, 0.0F, 0.18F});
+        SetShadowColor(bk::ColorRGBA{0.0F, 0.0F, 0.0F, 0.18F});
     }
 
     void SetSubtitle(std::string subtitle)
@@ -116,7 +116,7 @@ public:
             bk::Rect{content.x, content.y + 34.0F, content.width, std::max(0.0F, content.height - 34.0F)},
             subtitle_,
             15.0F,
-            bk::Color{0.86F, 0.90F, 0.96F, 1.0F});
+            bk::ColorRGBA{0.86F, 0.90F, 0.96F, 1.0F});
     }
 
 protected:
@@ -134,7 +134,7 @@ private:
     Callback callback_{};
 };
 
-bk::FocusHighlightStyle MakeFocusStyle(const bk::Color& color1, const bk::Color& color2, float inset = 6.0F)
+bk::FocusHighlightStyle MakeFocusStyle(const bk::ColorRGBA& color1, const bk::ColorRGBA& color2, float inset = 6.0F)
 {
     bk::FocusHighlightStyle style;
     style.color1 = color1;
@@ -159,25 +159,25 @@ public:
         dialog_ = std::make_shared<bk::VBox>();
         dialog_->SetName("ModalDialog");
         dialog_->SetDrawBackground(true);
-        dialog_->SetBackgroundColor(bk::Color{0.12F, 0.15F, 0.23F, 1.0F});
+        dialog_->SetBackgroundColor(bk::ColorRGBA{0.12F, 0.15F, 0.23F, 1.0F});
         dialog_->SetCornerRadius(24.0F);
         dialog_->SetShadowEnabled(true);
         dialog_->SetShadowOffset(0.0F, 18.0F);
         dialog_->SetShadowBlurRadius(24.0F);
         dialog_->SetShadowSpread(4.0F);
-        dialog_->SetShadowColor(bk::Color{0.0F, 0.0F, 0.0F, 0.26F});
+        dialog_->SetShadowColor(bk::ColorRGBA{0.0F, 0.0F, 0.0F, 0.26F});
         dialog_->SetPaddingTop(22.0F);
         dialog_->SetPaddingRight(24.0F);
         dialog_->SetPaddingBottom(22.0F);
         dialog_->SetPaddingLeft(24.0F);
         dialog_->SetSpacing(14.0F);
 
-        title_ = MakeLabel("modal/title"_i18n, 30.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
-        subtitle_ = MakeLabel("modal/subtitle"_i18n, 17.0F, bk::Color{0.77F, 0.84F, 0.93F, 1.0F});
-        modalFocusLabel_ = MakeLabel("", 16.0F, bk::Color{0.93F, 0.95F, 0.99F, 1.0F});
-        modalDefaultLabel_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
-        modalLastLabel_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
-        modalActionLabel_ = MakeLabel("modal/action_ready"_i18n, 16.0F, bk::Color{0.98F, 0.85F, 0.50F, 1.0F});
+        title_ = MakeLabel("modal/title"_i18n, 30.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
+        subtitle_ = MakeLabel("modal/subtitle"_i18n, 17.0F, bk::ColorRGBA{0.77F, 0.84F, 0.93F, 1.0F});
+        modalFocusLabel_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.93F, 0.95F, 0.99F, 1.0F});
+        modalDefaultLabel_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
+        modalLastLabel_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
+        modalActionLabel_ = MakeLabel("modal/action_ready"_i18n, 16.0F, bk::ColorRGBA{0.98F, 0.85F, 0.50F, 1.0F});
 
         // 四个操作按钮分成上下两行，便于演示方向键/手柄导航。
         topRow_ = std::make_shared<bk::HBox>();
@@ -191,19 +191,19 @@ public:
         primaryButton_ = MakeButton(
             "modal/confirm"_i18n,
             "modal/confirm_hint"_i18n,
-            bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
+            bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F});
         secondaryButton_ = MakeButton(
             "modal/go_default"_i18n,
             "modal/go_default_hint"_i18n,
-            bk::Color{0.18F, 0.67F, 0.53F, 1.0F});
+            bk::ColorRGBA{0.18F, 0.67F, 0.53F, 1.0F});
         lastFocusButton_ = MakeButton(
             "modal/go_last"_i18n,
             "modal/go_last_hint"_i18n,
-            bk::Color{0.77F, 0.48F, 0.24F, 1.0F});
+            bk::ColorRGBA{0.77F, 0.48F, 0.24F, 1.0F});
         closeButton_ = MakeButton(
             "modal/close"_i18n,
             "modal/close_hint"_i18n,
-            bk::Color{0.78F, 0.32F, 0.36F, 1.0F});
+            bk::ColorRGBA{0.78F, 0.32F, 0.36F, 1.0F});
 
         // 模态框内部按钮只修改自身状态或设置关闭标记；
         // 真正移除模态层由主循环在帧尾统一处理。
@@ -295,7 +295,7 @@ protected:
     void Draw(bk::RenderQueue& queue) const override
     {
         // 半透明遮罩压暗主页面，突出模态层。
-        queue.PushRect(frame_, bk::Color{0.03F, 0.04F, 0.08F, 0.72F});
+        queue.PushRect(frame_, bk::ColorRGBA{0.03F, 0.04F, 0.08F, 0.72F});
     }
 
     void Update(float) override
@@ -317,7 +317,7 @@ protected:
     }
 
 private:
-    static std::shared_ptr<bk::Label> MakeLabel(const std::string& text, float fontSize, const bk::Color& color)
+    static std::shared_ptr<bk::Label> MakeLabel(const std::string& text, float fontSize, const bk::ColorRGBA& color)
     {
         // 小型工厂函数减少构造 Label 时重复设置字号和颜色的样板代码。
         auto label = std::make_shared<bk::Label>(text);
@@ -326,13 +326,13 @@ private:
         return label;
     }
 
-    static std::shared_ptr<ActionButton> MakeButton(const std::string& title, const std::string& subtitle, const bk::Color& color)
+    static std::shared_ptr<ActionButton> MakeButton(const std::string& title, const std::string& subtitle, const bk::ColorRGBA& color)
     {
         // 模态框按钮等宽拉伸，让两列按钮保持整齐。
         auto button = std::make_shared<ActionButton>(title, subtitle);
         button->SetBackgroundColor(color);
         button->SetFlexGrow(1.0F);
-        button->SetTextColor(bk::Color{1.0F, 1.0F, 1.0F, 1.0F});
+        button->SetTextColor(bk::ColorRGBA{1.0F, 1.0F, 1.0F, 1.0F});
         return button;
     }
 
@@ -384,7 +384,7 @@ public:
         headerBar_ = std::make_shared<bk::HBox>();
         headerBar_->SetName("HeaderBar");
         headerBar_->SetDrawBackground(true);
-        headerBar_->SetBackgroundColor(bk::Color{0.11F, 0.16F, 0.25F, 1.0F});
+        headerBar_->SetBackgroundColor(bk::ColorRGBA{0.11F, 0.16F, 0.25F, 1.0F});
         headerBar_->SetPaddingTop(18.0F);
         headerBar_->SetPaddingRight(22.0F);
         headerBar_->SetPaddingBottom(18.0F);
@@ -395,11 +395,11 @@ public:
         headerText_->SetName("HeaderText");
         headerText_->SetSpacing(6.0F);
         headerText_->SetFlexGrow(1.0F);
-        headerTitle_ = MakeLabel("page/title"_i18n, 33.0F, bk::Color{0.98F, 0.99F, 1.0F, 1.0F});
-        headerSubtitle_ = MakeLabel("page/subtitle"_i18n, 17.0F, bk::Color{0.77F, 0.84F, 0.93F, 1.0F});
+        headerTitle_ = MakeLabel("page/title"_i18n, 33.0F, bk::ColorRGBA{0.98F, 0.99F, 1.0F, 1.0F});
+        headerSubtitle_ = MakeLabel("page/subtitle"_i18n, 17.0F, bk::ColorRGBA{0.77F, 0.84F, 0.93F, 1.0F});
         headerText_->AddChild(headerTitle_);
         headerText_->AddChild(headerSubtitle_);
-        headerHint_ = MakeLabel("page/hint"_i18n, 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
+        headerHint_ = MakeLabel("page/hint"_i18n, 16.0F, bk::ColorRGBA{0.98F, 0.85F, 0.51F, 1.0F});
         headerHint_->SetWidth(360.0F);
         headerBar_->AddChild(headerText_);
         headerBar_->AddChild(headerHint_);
@@ -416,12 +416,12 @@ public:
         leftColumn_->SetSpacing(18.0F);
 
         // 导航面板演示普通按钮点击、焦点路径和打开模态层。
-        navPanel_ = MakePanel("NavPanel", bk::Color{0.93F, 0.95F, 0.99F, 1.0F});
-        navTitle_ = MakeLabel("nav/title"_i18n, 24.0F, bk::Color{0.10F, 0.14F, 0.21F, 1.0F});
-        navTip_ = MakeLabel("nav/tip"_i18n, 16.0F, bk::Color{0.31F, 0.38F, 0.49F, 1.0F});
-        navHome_ = MakeActionButton("nav/home"_i18n, "nav/home_hint"_i18n, bk::Color{0.22F, 0.49F, 0.93F, 1.0F});
-        navGallery_ = MakeActionButton("nav/gallery"_i18n, "nav/gallery_hint"_i18n, bk::Color{0.20F, 0.64F, 0.55F, 1.0F});
-        openModalButton_ = MakeActionButton("nav/open_modal"_i18n, "nav/open_modal_hint"_i18n, bk::Color{0.79F, 0.45F, 0.26F, 1.0F});
+        navPanel_ = MakePanel("NavPanel", bk::ColorRGBA{0.93F, 0.95F, 0.99F, 1.0F});
+        navTitle_ = MakeLabel("nav/title"_i18n, 24.0F, bk::ColorRGBA{0.10F, 0.14F, 0.21F, 1.0F});
+        navTip_ = MakeLabel("nav/tip"_i18n, 16.0F, bk::ColorRGBA{0.31F, 0.38F, 0.49F, 1.0F});
+        navHome_ = MakeActionButton("nav/home"_i18n, "nav/home_hint"_i18n, bk::ColorRGBA{0.22F, 0.49F, 0.93F, 1.0F});
+        navGallery_ = MakeActionButton("nav/gallery"_i18n, "nav/gallery_hint"_i18n, bk::ColorRGBA{0.20F, 0.64F, 0.55F, 1.0F});
+        openModalButton_ = MakeActionButton("nav/open_modal"_i18n, "nav/open_modal_hint"_i18n, bk::ColorRGBA{0.79F, 0.45F, 0.26F, 1.0F});
         openModalButton_->SetMarginTop(4.0F);
         navPanel_->AddChild(navTitle_);
         navPanel_->AddChild(navTip_);
@@ -430,19 +430,19 @@ public:
         navPanel_->AddChild(openModalButton_);
 
         // 焦点面板集中演示默认焦点、最近焦点、清空焦点、线框和焦点高亮效果。
-        focusPanel_ = MakePanel("FocusPanel", bk::Color{0.14F, 0.18F, 0.28F, 1.0F});
-        focusTitle_ = MakeLabel("focus/title"_i18n, 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
-        focusTip_ = MakeLabel("focus/tip"_i18n, 16.0F, bk::Color{0.78F, 0.84F, 0.93F, 1.0F});
-        focusDefaultButton_ = MakeActionButton("focus/go_default"_i18n, "focus/go_default_hint"_i18n, bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
-        focusLastButton_ = MakeActionButton("focus/go_last"_i18n, "focus/go_last_hint"_i18n, bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
-        focusClearButton_ = MakeActionButton("focus/clear"_i18n, "focus/clear_hint"_i18n, bk::Color{0.72F, 0.34F, 0.39F, 1.0F});
-        focusWireframeButton_ = MakeActionButton("focus/wireframe_off"_i18n, "focus/wireframe_hint"_i18n, bk::Color{0.43F, 0.40F, 0.86F, 1.0F});
-        focusMotionButton_ = MakeActionButton("focus/motion_on"_i18n, "focus/motion_hint"_i18n, bk::Color{0.86F, 0.36F, 0.72F, 1.0F});
-        focusLayerTrailButton_ = MakeActionButton("focus/trail_on"_i18n, "focus/trail_hint"_i18n, bk::Color{0.34F, 0.62F, 0.88F, 1.0F});
-        focusThemeLabel_ = MakeLabel("focus/theme_label"_i18n("Aurora"), 15.0F, bk::Color{0.84F, 0.89F, 0.97F, 1.0F});
-        focusThemeAuroraButton_ = MakeActionButton("focus/theme_aurora"_i18n, "focus/theme_aurora_hint"_i18n, bk::Color{0.24F, 0.52F, 0.95F, 1.0F});
-        focusThemeSunsetButton_ = MakeActionButton("focus/theme_sunset"_i18n, "focus/theme_sunset_hint"_i18n, bk::Color{0.92F, 0.46F, 0.34F, 1.0F});
-        focusThemeMintButton_ = MakeActionButton("focus/theme_mint"_i18n, "focus/theme_mint_hint"_i18n, bk::Color{0.22F, 0.72F, 0.64F, 1.0F});
+        focusPanel_ = MakePanel("FocusPanel", bk::ColorRGBA{0.14F, 0.18F, 0.28F, 1.0F});
+        focusTitle_ = MakeLabel("focus/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
+        focusTip_ = MakeLabel("focus/tip"_i18n, 16.0F, bk::ColorRGBA{0.78F, 0.84F, 0.93F, 1.0F});
+        focusDefaultButton_ = MakeActionButton("focus/go_default"_i18n, "focus/go_default_hint"_i18n, bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F});
+        focusLastButton_ = MakeActionButton("focus/go_last"_i18n, "focus/go_last_hint"_i18n, bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F});
+        focusClearButton_ = MakeActionButton("focus/clear"_i18n, "focus/clear_hint"_i18n, bk::ColorRGBA{0.72F, 0.34F, 0.39F, 1.0F});
+        focusWireframeButton_ = MakeActionButton("focus/wireframe_off"_i18n, "focus/wireframe_hint"_i18n, bk::ColorRGBA{0.43F, 0.40F, 0.86F, 1.0F});
+        focusMotionButton_ = MakeActionButton("focus/motion_on"_i18n, "focus/motion_hint"_i18n, bk::ColorRGBA{0.86F, 0.36F, 0.72F, 1.0F});
+        focusLayerTrailButton_ = MakeActionButton("focus/trail_on"_i18n, "focus/trail_hint"_i18n, bk::ColorRGBA{0.34F, 0.62F, 0.88F, 1.0F});
+        focusThemeLabel_ = MakeLabel("focus/theme_label"_i18n("Aurora"), 15.0F, bk::ColorRGBA{0.84F, 0.89F, 0.97F, 1.0F});
+        focusThemeAuroraButton_ = MakeActionButton("focus/theme_aurora"_i18n, "focus/theme_aurora_hint"_i18n, bk::ColorRGBA{0.24F, 0.52F, 0.95F, 1.0F});
+        focusThemeSunsetButton_ = MakeActionButton("focus/theme_sunset"_i18n, "focus/theme_sunset_hint"_i18n, bk::ColorRGBA{0.92F, 0.46F, 0.34F, 1.0F});
+        focusThemeMintButton_ = MakeActionButton("focus/theme_mint"_i18n, "focus/theme_mint_hint"_i18n, bk::ColorRGBA{0.22F, 0.72F, 0.64F, 1.0F});
         focusPanel_->AddChild(focusTitle_);
         focusPanel_->AddChild(focusTip_);
         focusPanel_->AddChild(focusDefaultButton_);
@@ -457,11 +457,11 @@ public:
         focusPanel_->AddChild(focusThemeMintButton_);
 
         // 语言面板演示运行时切换 i18n 文案。
-        langPanel_ = MakePanel("LangPanel", bk::Color{0.14F, 0.18F, 0.28F, 1.0F});
-        langTitle_ = MakeLabel("lang/title"_i18n, 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
-        langHint_ = MakeLabel("lang/hint"_i18n, 16.0F, bk::Color{0.78F, 0.84F, 0.93F, 1.0F});
-        langZhButton_ = MakeActionButton("lang/zh"_i18n, "lang/zh_hint"_i18n, bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
-        langEnButton_ = MakeActionButton("lang/en"_i18n, "lang/en_hint"_i18n, bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
+        langPanel_ = MakePanel("LangPanel", bk::ColorRGBA{0.14F, 0.18F, 0.28F, 1.0F});
+        langTitle_ = MakeLabel("lang/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
+        langHint_ = MakeLabel("lang/hint"_i18n, 16.0F, bk::ColorRGBA{0.78F, 0.84F, 0.93F, 1.0F});
+        langZhButton_ = MakeActionButton("lang/zh"_i18n, "lang/zh_hint"_i18n, bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F});
+        langEnButton_ = MakeActionButton("lang/en"_i18n, "lang/en_hint"_i18n, bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F});
         langPanel_->AddChild(langTitle_);
         langPanel_->AddChild(langHint_);
         langPanel_->AddChild(langZhButton_);
@@ -479,15 +479,15 @@ public:
         rightColumn_->SetSpacing(18.0F);
 
         // 状态面板显示当前焦点、默认焦点、最近焦点、指针位置、输入事件和顶层 View 数量。
-        statusPanel_ = MakePanel("StatusPanel", bk::Color{0.11F, 0.15F, 0.23F, 1.0F});
-        statusTitle_ = MakeLabel("status/title"_i18n, 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
-        statusFocus_ = MakeLabel("", 16.0F, bk::Color{0.94F, 0.96F, 1.0F, 1.0F});
-        statusDefault_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
-        statusLast_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
-        statusPointer_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
-        statusKey_ = MakeLabel("status/key_idle"_i18n, 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
-        statusAction_ = MakeLabel("status/action_ready"_i18n, 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
-        statusModal_ = MakeLabel("Top Views: 1", 16.0F, bk::Color{0.76F, 0.83F, 0.92F, 1.0F});
+        statusPanel_ = MakePanel("StatusPanel", bk::ColorRGBA{0.11F, 0.15F, 0.23F, 1.0F});
+        statusTitle_ = MakeLabel("status/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
+        statusFocus_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.94F, 0.96F, 1.0F, 1.0F});
+        statusDefault_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
+        statusLast_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
+        statusPointer_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
+        statusKey_ = MakeLabel("status/key_idle"_i18n, 16.0F, bk::ColorRGBA{0.98F, 0.85F, 0.51F, 1.0F});
+        statusAction_ = MakeLabel("status/action_ready"_i18n, 16.0F, bk::ColorRGBA{0.98F, 0.85F, 0.51F, 1.0F});
+        statusModal_ = MakeLabel("Top Views: 1", 16.0F, bk::ColorRGBA{0.76F, 0.83F, 0.92F, 1.0F});
         statusPanel_->AddChild(statusTitle_);
         statusPanel_->AddChild(statusFocus_);
         statusPanel_->AddChild(statusDefault_);
@@ -503,26 +503,26 @@ public:
         lowerRow_->SetFlexGrow(1.0F);
 
         // View 树面板用于观察当前 Application 中可见 View 的层级关系。
-        treePanel_ = MakePanel("TreePanel", bk::Color{0.93F, 0.95F, 0.99F, 1.0F});
+        treePanel_ = MakePanel("TreePanel", bk::ColorRGBA{0.93F, 0.95F, 0.99F, 1.0F});
         treePanel_->SetWidth(338.0F);
-        treeTitle_ = MakeLabel("tree/title"_i18n, 23.0F, bk::Color{0.10F, 0.14F, 0.21F, 1.0F});
-        treeSubtitle_ = MakeLabel("tree/subtitle"_i18n, 16.0F, bk::Color{0.31F, 0.38F, 0.49F, 1.0F});
+        treeTitle_ = MakeLabel("tree/title"_i18n, 23.0F, bk::ColorRGBA{0.10F, 0.14F, 0.21F, 1.0F});
+        treeSubtitle_ = MakeLabel("tree/subtitle"_i18n, 16.0F, bk::ColorRGBA{0.31F, 0.38F, 0.49F, 1.0F});
         treePanel_->AddChild(treeTitle_);
         treePanel_->AddChild(treeSubtitle_);
         // 预先创建固定数量的文本行，刷新时只替换内容，避免每帧增删控件。
         for (int index = 0; index < 16; ++index)
         {
-            auto line = MakeLabel("", 15.0F, bk::Color{0.16F, 0.22F, 0.32F, 1.0F});
+            auto line = MakeLabel("", 15.0F, bk::ColorRGBA{0.16F, 0.22F, 0.32F, 1.0F});
             line->SetMarginLeft(4.0F);
             treeLines_.push_back(line);
             treePanel_->AddChild(line);
         }
 
         // 内容动作区提供另一组可聚焦按钮，用来测试跨区域方向导航。
-        actionPanel_ = MakePanel("ActionPanel", bk::Color{0.14F, 0.18F, 0.28F, 1.0F});
+        actionPanel_ = MakePanel("ActionPanel", bk::ColorRGBA{0.14F, 0.18F, 0.28F, 1.0F});
         actionPanel_->SetFlexGrow(1.0F);
-        actionTitle_ = MakeLabel("action/title"_i18n, 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
-        actionSubtitle_ = MakeLabel("action/subtitle"_i18n, 16.0F, bk::Color{0.78F, 0.84F, 0.93F, 1.0F});
+        actionTitle_ = MakeLabel("action/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
+        actionSubtitle_ = MakeLabel("action/subtitle"_i18n, 16.0F, bk::ColorRGBA{0.78F, 0.84F, 0.93F, 1.0F});
         actionRowTop_ = std::make_shared<bk::HBox>();
         actionRowTop_->SetName("ActionRowTop");
         actionRowTop_->SetSpacing(12.0F);
@@ -530,10 +530,10 @@ public:
         actionRowBottom_->SetName("ActionRowBottom");
         actionRowBottom_->SetSpacing(12.0F);
 
-        cardOverview_ = MakeActionButton("action/overview"_i18n, "action/overview_hint"_i18n, bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
-        cardMetrics_ = MakeActionButton("action/metrics"_i18n, "action/metrics_hint"_i18n, bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
-        cardOpenModal_ = MakeActionButton("action/open_modal"_i18n, "action/open_modal_hint"_i18n, bk::Color{0.79F, 0.45F, 0.26F, 1.0F});
-        cardRestoreFocus_ = MakeActionButton("action/restore_focus"_i18n, "action/restore_focus_hint"_i18n, bk::Color{0.44F, 0.41F, 0.86F, 1.0F});
+        cardOverview_ = MakeActionButton("action/overview"_i18n, "action/overview_hint"_i18n, bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F});
+        cardMetrics_ = MakeActionButton("action/metrics"_i18n, "action/metrics_hint"_i18n, bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F});
+        cardOpenModal_ = MakeActionButton("action/open_modal"_i18n, "action/open_modal_hint"_i18n, bk::ColorRGBA{0.79F, 0.45F, 0.26F, 1.0F});
+        cardRestoreFocus_ = MakeActionButton("action/restore_focus"_i18n, "action/restore_focus_hint"_i18n, bk::ColorRGBA{0.44F, 0.41F, 0.86F, 1.0F});
 
         // 动作按钮按两行两列摆放，和左侧控制面板形成横向导航关系。
         actionRowTop_->AddChild(cardOverview_);
@@ -679,10 +679,10 @@ protected:
     void Draw(bk::RenderQueue& queue) const override
     {
         // 绘制深色背景和顶部强调线，其他面板由各自控件绘制。
-        queue.PushRect(frame_, bk::Color{0.05F, 0.07F, 0.11F, 1.0F});
+        queue.PushRect(frame_, bk::ColorRGBA{0.05F, 0.07F, 0.11F, 1.0F});
         queue.PushRect(
             bk::Rect{frame_.x, frame_.y, frame_.width, 8.0F},
-            bk::Color{0.20F, 0.52F, 0.97F, 1.0F});
+            bk::ColorRGBA{0.20F, 0.52F, 0.97F, 1.0F});
     }
 
     void Update(float) override
@@ -698,7 +698,7 @@ protected:
     }
 
 private:
-    static std::shared_ptr<bk::Label> MakeLabel(const std::string& text, float fontSize, const bk::Color& color)
+    static std::shared_ptr<bk::Label> MakeLabel(const std::string& text, float fontSize, const bk::ColorRGBA& color)
     {
         // 通用标签工厂：统一字号和颜色设置。
         auto label = std::make_shared<bk::Label>(text);
@@ -707,19 +707,19 @@ private:
         return label;
     }
 
-    static std::shared_ptr<bk::VBox> MakePanel(const std::string& name, const bk::Color& color)
+    static std::shared_ptr<bk::VBox> MakePanel(const std::string& name, const bk::ColorRGBA& color)
     {
         // 面板统一采用圆角、阴影和内边距，保证整体视觉节奏一致。
         auto panel = std::make_shared<bk::VBox>();
         panel->SetName(name);
         panel->SetDrawBackground(true);
         panel->SetBackgroundColor(color);
-        panel->SetCornerRadius(22.0F);
+        panel->SetCornerRadius(1.0F);
         panel->SetShadowEnabled(true);
         panel->SetShadowOffset(0.0F, 10.0F);
         panel->SetShadowBlurRadius(16.0F);
         panel->SetShadowSpread(2.0F);
-        panel->SetShadowColor(bk::Color{0.0F, 0.0F, 0.0F, 0.16F});
+        panel->SetShadowColor(bk::ColorRGBA{0.0F, 0.0F, 0.0F, 0.16F});
         panel->SetPaddingTop(18.0F);
         panel->SetPaddingRight(18.0F);
         panel->SetPaddingBottom(18.0F);
@@ -728,12 +728,12 @@ private:
         return panel;
     }
 
-    static std::shared_ptr<ActionButton> MakeActionButton(const std::string& title, const std::string& subtitle, const bk::Color& color)
+    static std::shared_ptr<ActionButton> MakeActionButton(const std::string& title, const std::string& subtitle, const bk::ColorRGBA& color)
     {
         // 页面内的按钮统一走这个工厂，保证主文本、副文本和配色一致。
         auto button = std::make_shared<ActionButton>(title, subtitle);
         button->SetBackgroundColor(color);
-        button->SetTextColor(bk::Color{1.0F, 1.0F, 1.0F, 1.0F});
+        button->SetTextColor(bk::ColorRGBA{1.0F, 1.0F, 1.0F, 1.0F});
         return button;
     }
 
@@ -743,7 +743,7 @@ private:
         statusAction_->SetText("status/action"_i18n(std::move(action)));
     }
 
-    void ApplyFocusTheme(const std::string& name, const bk::Color& color1, const bk::Color& color2)
+    void ApplyFocusTheme(const std::string& name, const bk::ColorRGBA& color1, const bk::ColorRGBA& color2)
     {
         // 切换当前主题名，并同步到每个可聚焦控件自己的聚焦框样式。
         currentFocusThemeName_ = name;
@@ -895,22 +895,22 @@ private:
         focusThemeAuroraButton_->SetCallback([this](ActionButton&) {
             ApplyFocusTheme(
                 "Aurora",
-                bk::Color{0.34F, 0.76F, 1.0F, 1.0F},
-                bk::Color{0.76F, 0.52F, 1.0F, 1.0F});
+                bk::ColorRGBA{0.34F, 0.76F, 1.0F, 1.0F},
+                bk::ColorRGBA{0.76F, 0.52F, 1.0F, 1.0F});
             SetAction("Focus theme switched to Aurora");
         });
         focusThemeSunsetButton_->SetCallback([this](ActionButton&) {
             ApplyFocusTheme(
                 "Sunset",
-                bk::Color{1.0F, 0.72F, 0.34F, 1.0F},
-                bk::Color{1.0F, 0.36F, 0.56F, 1.0F});
+                bk::ColorRGBA{1.0F, 0.72F, 0.34F, 1.0F},
+                bk::ColorRGBA{1.0F, 0.36F, 0.56F, 1.0F});
             SetAction("Focus theme switched to Sunset");
         });
         focusThemeMintButton_->SetCallback([this](ActionButton&) {
             ApplyFocusTheme(
                 "Mint",
-                bk::Color{0.42F, 1.0F, 0.86F, 1.0F},
-                bk::Color{0.20F, 0.66F, 1.0F, 1.0F});
+                bk::ColorRGBA{0.42F, 1.0F, 0.86F, 1.0F},
+                bk::ColorRGBA{0.20F, 0.66F, 1.0F, 1.0F});
             SetAction("Focus theme switched to Mint");
         });
 
@@ -940,24 +940,25 @@ private:
             RequestLastFocus();
         });
 
-        navHome_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.22F, 0.49F, 0.93F, 1.0F}, bk::Color{0.40F, 0.68F, 1.0F, 1.0F}));
-        navGallery_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.20F, 0.64F, 0.55F, 1.0F}, bk::Color{0.48F, 0.88F, 0.70F, 1.0F}));
-        openModalButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.79F, 0.45F, 0.26F, 1.0F}, bk::Color{0.96F, 0.66F, 0.40F, 1.0F}));
-        focusDefaultButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.23F, 0.50F, 0.95F, 1.0F}, bk::Color{0.62F, 0.76F, 1.0F, 1.0F}));
-        focusLastButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.20F, 0.68F, 0.52F, 1.0F}, bk::Color{0.49F, 0.88F, 0.70F, 1.0F}));
-        focusClearButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.72F, 0.34F, 0.39F, 1.0F}, bk::Color{0.96F, 0.58F, 0.63F, 1.0F}));
-        focusWireframeButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.43F, 0.40F, 0.86F, 1.0F}, bk::Color{0.69F, 0.66F, 1.0F, 1.0F}));
-        focusMotionButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.86F, 0.36F, 0.72F, 1.0F}, bk::Color{0.99F, 0.56F, 0.88F, 1.0F}));
-        focusLayerTrailButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.34F, 0.62F, 0.88F, 1.0F}, bk::Color{0.58F, 0.82F, 1.0F, 1.0F}));
-        focusThemeAuroraButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.24F, 0.52F, 0.95F, 1.0F}, bk::Color{0.63F, 0.78F, 1.0F, 1.0F}));
-        focusThemeSunsetButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.92F, 0.46F, 0.34F, 1.0F}, bk::Color{1.0F, 0.66F, 0.52F, 1.0F}));
-        focusThemeMintButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.22F, 0.72F, 0.64F, 1.0F}, bk::Color{0.50F, 0.94F, 0.83F, 1.0F}));
-        langZhButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.23F, 0.50F, 0.95F, 1.0F}, bk::Color{0.62F, 0.76F, 1.0F, 1.0F}));
-        langEnButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.20F, 0.68F, 0.52F, 1.0F}, bk::Color{0.49F, 0.88F, 0.70F, 1.0F}));
-        cardOverview_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.23F, 0.50F, 0.95F, 1.0F}, bk::Color{0.62F, 0.76F, 1.0F, 1.0F}));
-        cardMetrics_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.20F, 0.68F, 0.52F, 1.0F}, bk::Color{0.49F, 0.88F, 0.70F, 1.0F}));
-        cardOpenModal_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.79F, 0.45F, 0.26F, 1.0F}, bk::Color{0.96F, 0.66F, 0.40F, 1.0F}));
-        cardRestoreFocus_->SetFocusHighlightStyle(MakeFocusStyle(bk::Color{0.44F, 0.41F, 0.86F, 1.0F}, bk::Color{0.70F, 0.67F, 1.0F, 1.0F}));
+        navHome_->SetCornerRadius(1.0F);
+        navHome_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.22F, 0.49F, 0.93F, 1.0F}, bk::ColorRGBA{0.40F, 0.68F, 1.0F, 1.0F}));
+        navGallery_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.20F, 0.64F, 0.55F, 1.0F}, bk::ColorRGBA{0.48F, 0.88F, 0.70F, 1.0F}));
+        openModalButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.79F, 0.45F, 0.26F, 1.0F}, bk::ColorRGBA{0.96F, 0.66F, 0.40F, 1.0F}));
+        focusDefaultButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F}, bk::ColorRGBA{0.62F, 0.76F, 1.0F, 1.0F}));
+        focusLastButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F}, bk::ColorRGBA{0.49F, 0.88F, 0.70F, 1.0F}));
+        focusClearButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.72F, 0.34F, 0.39F, 1.0F}, bk::ColorRGBA{0.96F, 0.58F, 0.63F, 1.0F}));
+        focusWireframeButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.43F, 0.40F, 0.86F, 1.0F}, bk::ColorRGBA{0.69F, 0.66F, 1.0F, 1.0F}));
+        focusMotionButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.86F, 0.36F, 0.72F, 1.0F}, bk::ColorRGBA{0.99F, 0.56F, 0.88F, 1.0F}));
+        focusLayerTrailButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.34F, 0.62F, 0.88F, 1.0F}, bk::ColorRGBA{0.58F, 0.82F, 1.0F, 1.0F}));
+        focusThemeAuroraButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.24F, 0.52F, 0.95F, 1.0F}, bk::ColorRGBA{0.63F, 0.78F, 1.0F, 1.0F}));
+        focusThemeSunsetButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.92F, 0.46F, 0.34F, 1.0F}, bk::ColorRGBA{1.0F, 0.66F, 0.52F, 1.0F}));
+        focusThemeMintButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.22F, 0.72F, 0.64F, 1.0F}, bk::ColorRGBA{0.50F, 0.94F, 0.83F, 1.0F}));
+        langZhButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F}, bk::ColorRGBA{0.62F, 0.76F, 1.0F, 1.0F}));
+        langEnButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F}, bk::ColorRGBA{0.49F, 0.88F, 0.70F, 1.0F}));
+        cardOverview_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F}, bk::ColorRGBA{0.62F, 0.76F, 1.0F, 1.0F}));
+        cardMetrics_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F}, bk::ColorRGBA{0.49F, 0.88F, 0.70F, 1.0F}));
+        cardOpenModal_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.79F, 0.45F, 0.26F, 1.0F}, bk::ColorRGBA{0.96F, 0.66F, 0.40F, 1.0F}));
+        cardRestoreFocus_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.44F, 0.41F, 0.86F, 1.0F}, bk::ColorRGBA{0.70F, 0.67F, 1.0F, 1.0F}));
     }
 
     void BuildNavigation()
@@ -1086,7 +1087,7 @@ int main(int argc, char** argv)
         appDesc.window.width = static_cast<int>(kDesignWidth);
         appDesc.window.height = static_cast<int>(kDesignHeight);
         appDesc.logicalSize = bk::Vector2{kDesignWidth, kDesignHeight};
-        appDesc.clearColor = bk::Color{0.03F, 0.04F, 0.08F, 1.0F};
+        appDesc.clearColor = bk::ColorRGBA{0.03F, 0.04F, 0.08F, 1.0F};
         appDesc.name = "BeikUI Focus Demo";
         appDesc.version = "0.3.0";
         appDesc.identifier = "bkui.demo.focus_view";
@@ -1113,6 +1114,7 @@ int main(int argc, char** argv)
         }
 
         bk::Application& app = host.GetApplication();
+        
         app.SetPreserveInactiveFocusHighlights(true);
         bklog.info("bkui_demo: application initialized");
 
@@ -1146,12 +1148,23 @@ int main(int argc, char** argv)
 
         // 主循环采用固定 60 FPS，确保演示中的焦点状态和动画节奏稳定。
         bk::MainLoopDesc loopDesc;
-        loopDesc.fixedDeltaSeconds = 1.0F / 120.0F;
+        loopDesc.fixedDeltaSeconds = 1.0F / 60.0F;
         loopDesc.useFixedDelta = true;
         loopDesc.synchronizeToFixedDelta = true;
 
 
+
+
+
+        // 主循环
         const std::uint64_t executedFrames = host.MainLoop(loopDesc);
+
+
+
+
+
+
+
 
         // 根据退出原因写不同日志，方便排查平台关闭还是应用主动退出。
         if (app.QuitRequested())
@@ -1168,9 +1181,8 @@ int main(int argc, char** argv)
         }
         bklog.info("bkui_demo: executed frames = " + std::to_string(executedFrames));
 
-        // 正常收尾：先停 Host，再关闭文件系统。
+        //关闭文件系统和平台Host。
         host.Shutdown();
-        bk::FileSystem::Shutdown();
     }
     catch (const std::exception& ex)
     {

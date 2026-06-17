@@ -20,14 +20,14 @@ public:
     [[nodiscard]] const std::string& GetText() const;
 
     /// 设置按钮背景色。
-    void SetBackgroundColor(const Color& color);
+    void SetBackgroundColor(const ColorRGBA& color);
     /// 获取按钮背景色。
-    [[nodiscard]] const Color& GetBackgroundColor() const;
+    [[nodiscard]] const ColorRGBA& GetBackgroundColor() const;
 
     /// 设置按钮文字颜色。
-    void SetTextColor(const Color& color);
+    void SetTextColor(const ColorRGBA& color);
     /// 获取按钮文字颜色。
-    [[nodiscard]] const Color& GetTextColor() const;
+    [[nodiscard]] const ColorRGBA& GetTextColor() const;
 
     /// 设置按钮字体大小。
     void SetFontSize(float fontSize);
@@ -41,7 +41,7 @@ public:
 
 private:
     std::string text_;
-    Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
+    ColorRGBA textColor_{1.0F, 1.0F, 1.0F, 1.0F};
     float fontSize_ = 18.0F;
 };
 

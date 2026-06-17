@@ -32,7 +32,7 @@ struct RenderCommand
 {
     RenderCommandType type = RenderCommandType::Rect;
     Rect bounds{};
-    Color color{};
+    ColorRGBA color{};
     std::string text;
     float fontSize = 16.0F;
     Vector2 lineStart{};

@@ -33,12 +33,12 @@ float Label::GetFontSize() const
     return fontSize_;
 }
 
-void Label::SetTextColor(const Color& color)
+void Label::SetTextColor(const ColorRGBA& color)
 {
     textColor_ = color;
 }
 
-const Color& Label::GetTextColor() const
+const ColorRGBA& Label::GetTextColor() const
 {
     return textColor_;
 }

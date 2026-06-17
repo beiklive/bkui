@@ -11,7 +11,7 @@ void RenderQueue::Clear()
     commands_.clear();
 }
 
-void RenderQueue::PushRect(const Rect& bounds, const Color& color)
+void RenderQueue::PushRect(const Rect& bounds, const ColorRGBA& color)
 {
     commands_.push_back(RenderCommand{
         RenderCommandType::Rect,
@@ -26,7 +26,7 @@ void RenderQueue::PushRect(const Rect& bounds, const Color& color)
     });
 }
 
-void RenderQueue::PushRoundedRect(const Rect& bounds, const Color& color, float cornerRadius)
+void RenderQueue::PushRoundedRect(const Rect& bounds, const ColorRGBA& color, float cornerRadius)
 {
     commands_.push_back(RenderCommand{
         RenderCommandType::RoundedRect,
@@ -41,7 +41,7 @@ void RenderQueue::PushRoundedRect(const Rect& bounds, const Color& color, float 
     });
 }
 
-void RenderQueue::PushText(const Rect& bounds, std::string text, float fontSize, const Color& color)
+void RenderQueue::PushText(const Rect& bounds, std::string text, float fontSize, const ColorRGBA& color)
 {
     commands_.push_back(RenderCommand{
         RenderCommandType::Text,
@@ -56,7 +56,7 @@ void RenderQueue::PushText(const Rect& bounds, std::string text, float fontSize,
     });
 }
 
-void RenderQueue::PushLine(const Vector2& start, const Vector2& end, const Color& color, float thickness)
+void RenderQueue::PushLine(const Vector2& start, const Vector2& end, const ColorRGBA& color, float thickness)
 {
     const float left = std::min(start.x, end.x);
     const float top = std::min(start.y, end.y);
