@@ -14,6 +14,11 @@ namespace bk
 
 Application* Application::activeApplication_ = nullptr;
 
+Application& Application::instance()
+{
+    return *activeApplication_;
+}
+
 namespace
 {
 constexpr float kNavigationEpsilon = 0.001F;

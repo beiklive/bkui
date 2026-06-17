@@ -127,6 +127,7 @@ std::uint64_t ApplicationHost::MainLoop(const MainLoopDesc& desc)
                 device_->Resize(windowSize_);
                 application_.SetWindowSize(windowSize_);
                 onResize_.Emit(*this, windowSize_);
+                bklog.info("Window resized to " + std::to_string(windowSize_.x) + "x" + std::to_string(windowSize_.y));
             }
 
             application_.SetInputState(input);

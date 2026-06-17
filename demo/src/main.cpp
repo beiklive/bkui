@@ -1113,14 +1113,12 @@ int main(int argc, char** argv)
             return 1;
         }
 
-        bk::Application& app = host.GetApplication();
-        
-        app.SetPreserveInactiveFocusHighlights(true);
+        bk::Application::instance().SetPreserveInactiveFocusHighlights(true);
         bklog.info("bkui_demo: application initialized");
 
         // 主页面是常驻层，先加入 Application，并请求默认焦点。
         auto page = std::make_shared<DemoPage>();
-        app.AddView(page);
+        bk::Application::instance().AddView(page);
         page->RequestDefaultFocus();
 
         std::shared_ptr<DemoModalView> modal;
@@ -1132,7 +1130,7 @@ int main(int argc, char** argv)
                 // 只有在页面确实请求时才创建模态层。
                 modal = std::make_shared<DemoModalView>();
                 modal->ApplyWireframe(page->IsWireframeEnabled());
-                app.AddView(modal);
+                bk::Application::instance().AddView(modal);
                 modal->RequestDefaultFocus();
             }
 
@@ -1140,7 +1138,7 @@ int main(int argc, char** argv)
             {
                 // 关闭前先清理焦点，再从 Application 中移除模态层。
                 modal->ClearCurrentFocus();
-                app.RemoveView(modal);
+                bk::Application::instance().RemoveView(modal);
                 modal.reset();
                 page->RequestLastFocus();
             }
@@ -1167,7 +1165,7 @@ int main(int argc, char** argv)
 
 
         // 根据退出原因写不同日志，方便排查平台关闭还是应用主动退出。
-        if (app.QuitRequested())
+        if (bk::Application::instance().QuitRequested())
         {
             bklog.info("bkui_demo: loop ended because application requested quit");
         }

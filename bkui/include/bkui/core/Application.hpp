@@ -57,6 +57,9 @@ public:
     /// 获取当前活动的应用实例，没有时返回空指针。
     [[nodiscard]] static Application* Active();
 
+    /// 获取应用单例引用（必须在 Initialize 之后调用）。
+    static Application& instance();
+
     /// 初始化应用上下文。
     bool Initialize(const ApplicationDesc& desc = {}, int argc = 0, const char* const* argv = nullptr);
 
