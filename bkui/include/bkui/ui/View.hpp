@@ -69,6 +69,11 @@ public:
 
     virtual ~View() = default;
 
+    /// 设置视图缩放比例（围绕中心点，不影响布局 frame）。
+    void SetScale(float scale);
+    /// 获取视图缩放比例。
+    [[nodiscard]] float GetScale() const;
+
     /// 设置视图名称，便于调试与日志定位。
     void SetName(std::string name);
     /// 获取视图名称。
@@ -403,6 +408,7 @@ protected:
     float maxHeight_ = std::numeric_limits<float>::max();
     float flexGrow_ = 0.0F;
     float flexShrink_ = 1.0F;
+    float scale_ = 1.0F;
 
 private:
     friend class Application;

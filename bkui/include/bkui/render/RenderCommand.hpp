@@ -16,6 +16,8 @@ enum class RenderCommandType
     Line,
     PushClip,
     PopClip,
+    PushTransform,
+    PopTransform,
 };
 
 /// 浮点矩形区域。
@@ -39,6 +41,9 @@ struct RenderCommand
     Vector2 lineEnd{};
     float lineThickness = 1.5F;
     float cornerRadius = 0.0F;
+    float transformScale = 1.0F;
+    float transformPivotX = 0.0F;
+    float transformPivotY = 0.0F;
 };
 
 }

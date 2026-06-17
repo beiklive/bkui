@@ -23,6 +23,9 @@ void RenderQueue::PushRect(const Rect& bounds, const ColorRGBA& color)
         {},
         1.5F,
         0.0F,
+        1.0F,
+        0.0F,
+        0.0F,
     });
 }
 
@@ -38,6 +41,9 @@ void RenderQueue::PushRoundedRect(const Rect& bounds, const ColorRGBA& color, fl
         {},
         1.5F,
         std::max(0.0F, cornerRadius),
+        1.0F,
+        0.0F,
+        0.0F,
     });
 }
 
@@ -52,6 +58,9 @@ void RenderQueue::PushText(const Rect& bounds, std::string text, float fontSize,
         {},
         {},
         1.5F,
+        0.0F,
+        1.0F,
+        0.0F,
         0.0F,
     });
 }
@@ -73,6 +82,9 @@ void RenderQueue::PushLine(const Vector2& start, const Vector2& end, const Color
         end,
         std::max(0.1F, thickness),
         0.0F,
+        1.0F,
+        0.0F,
+        0.0F,
     });
 }
 
@@ -88,6 +100,9 @@ void RenderQueue::PushClipRect(const Rect& bounds)
         {},
         1.5F,
         0.0F,
+        1.0F,
+        0.0F,
+        0.0F,
     });
 }
 
@@ -102,6 +117,45 @@ void RenderQueue::PopClipRect()
         {},
         {},
         1.5F,
+        0.0F,
+        1.0F,
+        0.0F,
+        0.0F,
+    });
+}
+
+void RenderQueue::PushTransform(float scale, float pivotX, float pivotY)
+{
+    commands_.push_back(RenderCommand{
+        RenderCommandType::PushTransform,
+        {},
+        {},
+        {},
+        0.0F,
+        {},
+        {},
+        1.5F,
+        0.0F,
+        scale,
+        pivotX,
+        pivotY,
+    });
+}
+
+void RenderQueue::PopTransform()
+{
+    commands_.push_back(RenderCommand{
+        RenderCommandType::PopTransform,
+        {},
+        {},
+        {},
+        0.0F,
+        {},
+        {},
+        1.5F,
+        0.0F,
+        1.0F,
+        0.0F,
         0.0F,
     });
 }

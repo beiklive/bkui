@@ -1,5 +1,7 @@
 #include <bkui/render/backend/opengl/OpenGLDevice.hpp>
 
+#include <bkui/core/Application.hpp>
+
 #include <SDL3/SDL_opengl.h>
 
 #include <array>
@@ -44,6 +46,11 @@ struct GLFunctions
     PFNGLACTIVETEXTUREPROC ActiveTexture = nullptr;
     PFNGLENABLEVERTEXATTRIBARRAYPROC EnableVertexAttribArray = nullptr;
     PFNGLVERTEXATTRIBPOINTERPROC VertexAttribPointer = nullptr;
+    PFNGLGENFRAMEBUFFERSPROC GenFramebuffers = nullptr;
+    PFNGLBINDFRAMEBUFFERPROC BindFramebuffer = nullptr;
+    PFNGLDELETEFRAMEBUFFERSPROC DeleteFramebuffers = nullptr;
+    PFNGLFRAMEBUFFERTEXTURE2DPROC FramebufferTexture2D = nullptr;
+    PFNGLBLITFRAMEBUFFERPROC BlitFramebuffer = nullptr;
 };
 
 struct GLBuffer
@@ -130,7 +137,12 @@ bool LoadGL(Platform& platform, GLFunctions& gl)
         LoadProc(platform, gl.Uniform1i, "glUniform1i") &&
         LoadProc(platform, gl.ActiveTexture, "glActiveTexture") &&
         LoadProc(platform, gl.EnableVertexAttribArray, "glEnableVertexAttribArray") &&
-        LoadProc(platform, gl.VertexAttribPointer, "glVertexAttribPointer");
+        LoadProc(platform, gl.VertexAttribPointer, "glVertexAttribPointer") &&
+        LoadProc(platform, gl.GenFramebuffers, "glGenFramebuffers") &&
+        LoadProc(platform, gl.BindFramebuffer, "glBindFramebuffer") &&
+        LoadProc(platform, gl.DeleteFramebuffers, "glDeleteFramebuffers") &&
+        LoadProc(platform, gl.FramebufferTexture2D, "glFramebufferTexture2D") &&
+        LoadProc(platform, gl.BlitFramebuffer, "glBlitFramebuffer");
 }
 
 GLenum ToGLBufferTarget(BufferUsage usage)
@@ -300,6 +312,8 @@ public:
 
     void Shutdown() override
     {
+        DestroyFbo();
+
         for (std::uint32_t i = 1; i <= pipelines_.size(); ++i)
         {
             DestroyPipeline(PipelineHandle{i});
@@ -326,10 +340,7 @@ public:
 
     void Resize(Vector2 size) override
     {
-        if (size.x > 0.0F && size.y > 0.0F)
-        {
-            glViewport(0, 0, static_cast<GLsizei>(size.x), static_cast<GLsizei>(size.y));
-        }
+        windowSize_ = size;
     }
 
     SwapchainHandle GetMainSwapchain() const override
@@ -594,7 +605,22 @@ public:
             return;
         }
 
-        Resize(platform_.GetWindowSize());
+        windowSize_ = platform_.GetWindowSize();
+        Vector2 logicalSize = Application::instance().GetLogicalSize();
+        if (logicalSize.x <= 0.0F || logicalSize.y <= 0.0F)
+        {
+            logicalSize = windowSize_;
+        }
+
+        const int lw = static_cast<int>(logicalSize.x);
+        const int lh = static_cast<int>(logicalSize.y);
+        if (fboWidth_ != lw || fboHeight_ != lh)
+        {
+            CreateFbo(lw, lh);
+        }
+
+        gl_.BindFramebuffer(GL_FRAMEBUFFER, fboId_);
+        glViewport(0, 0, lw, lh);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glClearColor(renderPass.clearColor.r, renderPass.clearColor.g, renderPass.clearColor.b, renderPass.clearColor.a);
@@ -731,10 +757,26 @@ public:
 
     void EndFrame(SwapchainHandle swapchain) override
     {
-        if (IsValid(swapchain))
+        if (!IsValid(swapchain))
         {
-            platform_.SwapOpenGLBuffers();
+            return;
         }
+
+        gl_.BindFramebuffer(GL_FRAMEBUFFER, 0);
+        const int ww = static_cast<int>(windowSize_.x);
+        const int wh = static_cast<int>(windowSize_.y);
+        glViewport(0, 0, ww, wh);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        if (fboId_ != 0 && fboWidth_ > 0 && fboHeight_ > 0)
+        {
+            gl_.BindFramebuffer(GL_READ_FRAMEBUFFER, fboId_);
+            gl_.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            gl_.BlitFramebuffer(0, 0, fboWidth_, fboHeight_, 0, 0, ww, wh, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        }
+
+        platform_.SwapOpenGLBuffers();
     }
 
     const char* BackendName() const override
@@ -743,6 +785,44 @@ public:
     }
 
 private:
+    void CreateFbo(int width, int height)
+    {
+        DestroyFbo();
+
+        gl_.GenFramebuffers(1, &fboId_);
+        glGenTextures(1, &fboTexture_);
+        glBindTexture(GL_TEXTURE_2D, fboTexture_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        gl_.BindFramebuffer(GL_FRAMEBUFFER, fboId_);
+        gl_.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboTexture_, 0);
+        gl_.BindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        fboWidth_ = width;
+        fboHeight_ = height;
+    }
+
+    void DestroyFbo()
+    {
+        if (fboTexture_ != 0)
+        {
+            glDeleteTextures(1, &fboTexture_);
+            fboTexture_ = 0;
+        }
+        if (fboId_ != 0)
+        {
+            gl_.DeleteFramebuffers(1, &fboId_);
+            fboId_ = 0;
+        }
+        fboWidth_ = 0;
+        fboHeight_ = 0;
+    }
+
     Platform& platform_;
     GLFunctions gl_;
     std::vector<GLBuffer> buffers_;
@@ -750,6 +830,11 @@ private:
     std::vector<GLShader> shaders_;
     std::vector<GLPipeline> pipelines_;
     std::vector<GLCommandBuffer> commandBuffers_;
+    Vector2 windowSize_{};
+    GLuint fboId_ = 0;
+    GLuint fboTexture_ = 0;
+    int fboWidth_ = 0;
+    int fboHeight_ = 0;
 };
 }
 

@@ -475,6 +475,15 @@ public:
         std::vector<RectF> clipStack;
         clipStack.push_back(fullClip);
 
+        struct TransformState
+        {
+            float scale = 1.0F;
+            float pivotX = 0.0F;
+            float pivotY = 0.0F;
+        };
+        std::vector<TransformState> transformStack;
+        transformStack.push_back(TransformState{1.0F, 0.0F, 0.0F});
+
         for (const RenderCommand& command : queue.Commands())
         {
             if (command.type == RenderCommandType::PushClip)
@@ -497,25 +506,65 @@ public:
                 continue;
             }
 
+            if (command.type == RenderCommandType::PushTransform)
+            {
+                const TransformState& current = transformStack.back();
+                TransformState next;
+                next.scale = current.scale * command.transformScale;
+                next.pivotX = command.transformPivotX;
+                next.pivotY = command.transformPivotY;
+                transformStack.push_back(next);
+                continue;
+            }
+
+            if (command.type == RenderCommandType::PopTransform)
+            {
+                if (transformStack.size() > 1)
+                {
+                    transformStack.pop_back();
+                }
+                continue;
+            }
+
             const RectF clip = clipStack.back();
             if (!IsValidRect(clip))
             {
                 continue;
             }
 
-            switch (command.type)
+            const TransformState& transformState = transformStack.back();
+            RenderCommand transformedCommand = command;
+            if (transformState.scale != 1.0F)
+            {
+                const float px = transformState.pivotX;
+                const float py = transformState.pivotY;
+                const float s = transformState.scale;
+                auto tx = [&](float x, float y) -> std::pair<float, float> {
+                    return {px + (x - px) * s, py + (y - py) * s};
+                };
+                auto [bx, by] = tx(transformedCommand.bounds.x, transformedCommand.bounds.y);
+                auto [bx2, by2] = tx(transformedCommand.bounds.x + transformedCommand.bounds.width,
+                                      transformedCommand.bounds.y + transformedCommand.bounds.height);
+                transformedCommand.bounds = Rect{bx, by, bx2 - bx, by2 - by};
+                auto [lsx, lsy] = tx(transformedCommand.lineStart.x, transformedCommand.lineStart.y);
+                auto [lex, ley] = tx(transformedCommand.lineEnd.x, transformedCommand.lineEnd.y);
+                transformedCommand.lineStart = Vector2{lsx, lsy};
+                transformedCommand.lineEnd = Vector2{lex, ley};
+            }
+
+            switch (transformedCommand.type)
             {
             case RenderCommandType::Rect:
-                EmitRect(command.bounds, command.color, clip);
+                EmitRect(transformedCommand.bounds, transformedCommand.color, clip);
                 break;
             case RenderCommandType::RoundedRect:
-                EmitRoundedRect(command.bounds, command.color, command.cornerRadius, clip);
+                EmitRoundedRect(transformedCommand.bounds, transformedCommand.color, transformedCommand.cornerRadius, clip);
                 break;
             case RenderCommandType::Text:
-                EmitText(command, clip);
+                EmitText(transformedCommand, clip);
                 break;
             case RenderCommandType::Line:
-                EmitLine(command, clip);
+                EmitLine(transformedCommand, clip);
                 break;
             case RenderCommandType::PushClip:
             case RenderCommandType::PopClip:

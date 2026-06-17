@@ -598,6 +598,16 @@ float View::GetFlexShrink() const
     return flexShrink_;
 }
 
+void View::SetScale(float scale)
+{
+    scale_ = scale;
+}
+
+float View::GetScale() const
+{
+    return scale_;
+}
+
 void View::SetNavigationTarget(NavigationDirection direction, const std::shared_ptr<View>& target)
 {
     navigationTargets_[NavigationIndex(direction)] = target;
@@ -833,11 +843,24 @@ void View::Paint(RenderQueue& queue) const
         return;
     }
 
+    const bool hasScale = scale_ != 1.0F;
+    if (hasScale)
+    {
+        queue.PushTransform(scale_,
+            frame_.x + frame_.width * 0.5F,
+            frame_.y + frame_.height * 0.5F);
+    }
+
     DrawShadow(queue);
     DrawBackground(queue);
     Draw(queue);
     DrawChildren(queue);
     DrawDebugWireframe(queue);
+
+    if (hasScale)
+    {
+        queue.PopTransform();
+    }
 }
 
 void View::Render(RenderQueue& queue) const

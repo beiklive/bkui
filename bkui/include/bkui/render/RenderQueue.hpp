@@ -25,6 +25,10 @@ public:
     void PushClipRect(const Rect& bounds);
     /// 结束当前裁剪区域。
     void PopClipRect();
+    /// 开始一个缩放变换（累积到当前变换栈）。
+    void PushTransform(float scale, float pivotX, float pivotY);
+    /// 结束当前缩放变换。
+    void PopTransform();
 
     /// 只读访问当前收集到的命令列表。
     [[nodiscard]] const std::vector<RenderCommand>& Commands() const;
