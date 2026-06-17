@@ -348,7 +348,11 @@ bool ApplicationHost::PresentFrame()
 
     device_->BeginFrame(swapchain_, RenderPassDesc{clearColor_});
     device_->BeginCommandBuffer(commandBuffer_);
-    if (!renderer_->Render(commandBuffer_, application_.GetRenderQueue(), ResolveLogicalSize()))
+    if (!renderer_->Render(
+            commandBuffer_,
+            application_.GetRenderQueue(),
+            ResolveLogicalSize(),
+            windowSize_))
     {
         bklog.error("Failed to record UI draw commands.");
         return false;

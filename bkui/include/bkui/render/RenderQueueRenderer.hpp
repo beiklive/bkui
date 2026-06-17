@@ -22,7 +22,8 @@ public:
     void Shutdown();
 
     /// 将一帧 RenderQueue 记录为绘制命令。
-    [[nodiscard]] bool Render(CommandBufferHandle commandBuffer, const RenderQueue& queue, Vector2 logicalSize);
+    /// logicalSize 表示 UI 布局坐标系，targetSize 表示最终输出像素尺寸。
+    [[nodiscard]] bool Render(CommandBufferHandle commandBuffer, const RenderQueue& queue, Vector2 logicalSize, Vector2 targetSize);
 
 private:
     class Impl;

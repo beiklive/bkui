@@ -39,6 +39,13 @@ struct RectF
     float height = 0.0F;
 };
 
+struct TransformState
+{
+    float scale = 1.0F;
+    float pivotX = 0.0F;
+    float pivotY = 0.0F;
+};
+
 struct GpuVertex
 {
     float position[2];
@@ -124,6 +131,28 @@ RectF IntersectRect(const RectF& a, const RectF& b)
 bool IsValidRect(const RectF& rect)
 {
     return rect.width > 0.0F && rect.height > 0.0F;
+}
+
+Vector2 ApplyTransform(const TransformState& transform, const Vector2& point)
+{
+    return Vector2{
+        transform.pivotX + (point.x - transform.pivotX) * transform.scale,
+        transform.pivotY + (point.y - transform.pivotY) * transform.scale,
+    };
+}
+
+RectF ApplyTransform(const TransformState& transform, const RectF& rect)
+{
+    const Vector2 p0 = ApplyTransform(transform, Vector2{rect.x, rect.y});
+    const Vector2 p1 = ApplyTransform(transform, Vector2{rect.x + rect.width, rect.y});
+    const Vector2 p2 = ApplyTransform(transform, Vector2{rect.x + rect.width, rect.y + rect.height});
+    const Vector2 p3 = ApplyTransform(transform, Vector2{rect.x, rect.y + rect.height});
+
+    const float minX = std::min(std::min(p0.x, p1.x), std::min(p2.x, p3.x));
+    const float minY = std::min(std::min(p0.y, p1.y), std::min(p2.y, p3.y));
+    const float maxX = std::max(std::max(p0.x, p1.x), std::max(p2.x, p3.x));
+    const float maxY = std::max(std::max(p0.y, p1.y), std::max(p2.y, p3.y));
+    return RectF{minX, minY, maxX - minX, maxY - minY};
 }
 
 std::vector<Vector2> BuildRoundedRectPath(const RectF& bounds, float radius)
@@ -460,14 +489,17 @@ public:
         atlasOverflowLogged = false;
     }
 
-    bool Render(CommandBufferHandle commandBuffer, const RenderQueue& queue, Vector2 logicalSize)
+    bool Render(CommandBufferHandle commandBuffer, const RenderQueue& queue, Vector2 logicalSize, Vector2 targetSize)
     {
-        if (!initialized || logicalSize.x <= 0.0F || logicalSize.y <= 0.0F)
+        if (!initialized ||
+            logicalSize.x <= 0.0F || logicalSize.y <= 0.0F ||
+            targetSize.x <= 0.0F || targetSize.y <= 0.0F)
         {
             return false;
         }
 
         currentLogicalSize = logicalSize;
+        currentTargetSize = targetSize;
         vertices.clear();
         batches.clear();
 
@@ -475,12 +507,6 @@ public:
         std::vector<RectF> clipStack;
         clipStack.push_back(fullClip);
 
-        struct TransformState
-        {
-            float scale = 1.0F;
-            float pivotX = 0.0F;
-            float pivotY = 0.0F;
-        };
         std::vector<TransformState> transformStack;
         transformStack.push_back(TransformState{1.0F, 0.0F, 0.0F});
 
@@ -488,12 +514,13 @@ public:
         {
             if (command.type == RenderCommandType::PushClip)
             {
-                clipStack.push_back(IntersectRect(clipStack.back(), RectF{
+                const RectF clipBounds = ApplyTransform(transformStack.back(), RectF{
                     command.bounds.x,
                     command.bounds.y,
                     command.bounds.width,
                     command.bounds.height,
-                }));
+                });
+                clipStack.push_back(IntersectRect(clipStack.back(), clipBounds));
                 continue;
             }
 
@@ -509,10 +536,14 @@ public:
             if (command.type == RenderCommandType::PushTransform)
             {
                 const TransformState& current = transformStack.back();
+                const Vector2 pivot = ApplyTransform(current, Vector2{
+                    command.transformPivotX,
+                    command.transformPivotY,
+                });
                 TransformState next;
                 next.scale = current.scale * command.transformScale;
-                next.pivotX = command.transformPivotX;
-                next.pivotY = command.transformPivotY;
+                next.pivotX = pivot.x;
+                next.pivotY = pivot.y;
                 transformStack.push_back(next);
                 continue;
             }
@@ -536,20 +567,33 @@ public:
             RenderCommand transformedCommand = command;
             if (transformState.scale != 1.0F)
             {
-                const float px = transformState.pivotX;
-                const float py = transformState.pivotY;
-                const float s = transformState.scale;
-                auto tx = [&](float x, float y) -> std::pair<float, float> {
-                    return {px + (x - px) * s, py + (y - py) * s};
+                const Vector2 topLeft = ApplyTransform(transformState, Vector2{
+                    transformedCommand.bounds.x,
+                    transformedCommand.bounds.y,
+                });
+                const Vector2 bottomRight = ApplyTransform(transformState, Vector2{
+                    transformedCommand.bounds.x + transformedCommand.bounds.width,
+                    transformedCommand.bounds.y + transformedCommand.bounds.height,
+                });
+                const Vector2 lineStart = ApplyTransform(transformState, transformedCommand.lineStart);
+                const Vector2 lineEnd = ApplyTransform(transformState, transformedCommand.lineEnd);
+
+                const float absScale = std::abs(transformState.scale);
+                const float scaledFontSize = transformedCommand.fontSize * absScale;
+                const float scaledThickness = transformedCommand.lineThickness * absScale;
+                const float scaledRadius = transformedCommand.cornerRadius * absScale;
+
+                transformedCommand.bounds = Rect{
+                    topLeft.x,
+                    topLeft.y,
+                    bottomRight.x - topLeft.x,
+                    bottomRight.y - topLeft.y,
                 };
-                auto [bx, by] = tx(transformedCommand.bounds.x, transformedCommand.bounds.y);
-                auto [bx2, by2] = tx(transformedCommand.bounds.x + transformedCommand.bounds.width,
-                                      transformedCommand.bounds.y + transformedCommand.bounds.height);
-                transformedCommand.bounds = Rect{bx, by, bx2 - bx, by2 - by};
-                auto [lsx, lsy] = tx(transformedCommand.lineStart.x, transformedCommand.lineStart.y);
-                auto [lex, ley] = tx(transformedCommand.lineEnd.x, transformedCommand.lineEnd.y);
-                transformedCommand.lineStart = Vector2{lsx, lsy};
-                transformedCommand.lineEnd = Vector2{lex, ley};
+                transformedCommand.lineStart = lineStart;
+                transformedCommand.lineEnd = lineEnd;
+                transformedCommand.fontSize = scaledFontSize;
+                transformedCommand.lineThickness = scaledThickness;
+                transformedCommand.cornerRadius = scaledRadius;
             }
 
             switch (transformedCommand.type)
@@ -891,20 +935,48 @@ private:
         });
     }
 
-    Vector2 ToClipSpace(float x, float y, Vector2 logicalSize) const
+    Vector2 TargetScale() const
     {
         return Vector2{
-            (x / logicalSize.x) * 2.0F - 1.0F,
-            1.0F - (y / logicalSize.y) * 2.0F,
+            currentLogicalSize.x > 0.0F ? currentTargetSize.x / currentLogicalSize.x : 1.0F,
+            currentLogicalSize.y > 0.0F ? currentTargetSize.y / currentLogicalSize.y : 1.0F,
         };
     }
 
-    void PushQuad(const RectF& rect, const ColorRGBA& color, TextureHandle texture, Vector2 logicalSize, float u0, float v0, float u1, float v1)
+    Vector2 LogicalToTarget(const Vector2& point) const
     {
-        const Vector2 topLeft = ToClipSpace(rect.x, rect.y, logicalSize);
-        const Vector2 bottomLeft = ToClipSpace(rect.x, rect.y + rect.height, logicalSize);
-        const Vector2 bottomRight = ToClipSpace(rect.x + rect.width, rect.y + rect.height, logicalSize);
-        const Vector2 topRight = ToClipSpace(rect.x + rect.width, rect.y, logicalSize);
+        const Vector2 scale = TargetScale();
+        return Vector2{
+            point.x * scale.x,
+            point.y * scale.y,
+        };
+    }
+
+    RectF LogicalToTarget(const RectF& rect) const
+    {
+        const Vector2 scale = TargetScale();
+        return RectF{
+            rect.x * scale.x,
+            rect.y * scale.y,
+            rect.width * scale.x,
+            rect.height * scale.y,
+        };
+    }
+
+    Vector2 ToClipSpace(float x, float y, Vector2 targetSize) const
+    {
+        return Vector2{
+            (x / targetSize.x) * 2.0F - 1.0F,
+            1.0F - (y / targetSize.y) * 2.0F,
+        };
+    }
+
+    void PushQuad(const RectF& rect, const ColorRGBA& color, TextureHandle texture, float u0, float v0, float u1, float v1)
+    {
+        const Vector2 topLeft = ToClipSpace(rect.x, rect.y, currentTargetSize);
+        const Vector2 bottomLeft = ToClipSpace(rect.x, rect.y + rect.height, currentTargetSize);
+        const Vector2 bottomRight = ToClipSpace(rect.x + rect.width, rect.y + rect.height, currentTargetSize);
+        const Vector2 topRight = ToClipSpace(rect.x + rect.width, rect.y, currentTargetSize);
 
         const auto pushVertex = [&](const Vector2& position, float u, float v) {
             vertices.push_back(GpuVertex{
@@ -926,7 +998,8 @@ private:
     void PushTriangle(const Vector2& p0, const Vector2& p1, const Vector2& p2, const ColorRGBA& color, TextureHandle texture)
     {
         const auto pushVertex = [&](const Vector2& position) {
-            const Vector2 clipPos = ToClipSpace(position.x, position.y, currentLogicalSize);
+            const Vector2 targetPoint = LogicalToTarget(position);
+            const Vector2 clipPos = ToClipSpace(targetPoint.x, targetPoint.y, currentTargetSize);
             vertices.push_back(GpuVertex{
                 {clipPos.x, clipPos.y},
                 {color.r, color.g, color.b, color.a},
@@ -1098,7 +1171,7 @@ private:
             return;
         }
 
-        PushQuad(clipped, color, whiteTexture, currentLogicalSize, 0.0F, 0.0F, 1.0F, 1.0F);
+        PushQuad(LogicalToTarget(clipped), color, whiteTexture, 0.0F, 0.0F, 1.0F, 1.0F);
     }
 
     void EmitRoundedRect(const Rect& rect, const ColorRGBA& color, float cornerRadius, const RectF& clip)
@@ -1148,19 +1221,25 @@ private:
             return;
         }
 
+        const Vector2 scale = TargetScale();
+        const float scaleX = std::max(0.0001F, scale.x);
+        const float scaleY = std::max(0.0001F, scale.y);
+        const float stretchX = scaleX / scaleY;
         const std::u32string text = Utf8ToUtf32(command.text);
-        const float primaryScale = stbtt_ScaleForPixelHeight(&primaryFace->info, command.fontSize);
+        const float rasterFontSize = std::max(1.0F, command.fontSize * scaleY);
+        const float primaryScale = stbtt_ScaleForPixelHeight(&primaryFace->info, rasterFontSize);
         int ascent = 0;
         int descent = 0;
         int lineGap = 0;
         stbtt_GetFontVMetrics(&primaryFace->info, &ascent, &descent, &lineGap);
-        const float baseline = command.bounds.y + static_cast<float>(ascent) * primaryScale;
-        float cursor = command.bounds.x;
+        const RectF targetClip = LogicalToTarget(clip);
+        const float baseline = command.bounds.y * scaleY + static_cast<float>(ascent) * primaryScale;
+        float cursor = command.bounds.x * scaleX;
 
         for (char32_t codepoint : text)
         {
             const std::uint32_t faceIndex = SelectFaceIndex(codepoint);
-            const GlyphEntry* glyph = EnsureGlyph(faceIndex, codepoint, command.fontSize);
+            const GlyphEntry* glyph = EnsureGlyph(faceIndex, codepoint, rasterFontSize);
             if (glyph == nullptr)
             {
                 continue;
@@ -1169,12 +1248,12 @@ private:
             if (glyph->width > 0 && glyph->height > 0)
             {
                 RectF glyphRect{
-                    cursor + static_cast<float>(glyph->x0),
+                    cursor + static_cast<float>(glyph->x0) * stretchX,
                     baseline + static_cast<float>(glyph->y0),
-                    static_cast<float>(glyph->width),
+                    static_cast<float>(glyph->width) * stretchX,
                     static_cast<float>(glyph->height),
                 };
-                const RectF clipped = IntersectRect(glyphRect, clip);
+                const RectF clipped = IntersectRect(glyphRect, targetClip);
                 if (IsValidRect(clipped))
                 {
                     const float du = glyph->u1 - glyph->u0;
@@ -1188,7 +1267,6 @@ private:
                         clipped,
                         command.color,
                         fontAtlasTexture,
-                        currentLogicalSize,
                         glyph->u0 + du * localLeft,
                         glyph->v0 + dv * localTop,
                         glyph->u0 + du * localRight,
@@ -1196,7 +1274,7 @@ private:
                 }
             }
 
-            cursor += static_cast<float>(glyph->advance);
+            cursor += static_cast<float>(glyph->advance) * stretchX;
         }
     }
 
@@ -1228,7 +1306,8 @@ private:
         const Vector2 p3{end.x + nx, end.y + ny};
 
         const auto pushVertex = [&](const Vector2& position) {
-            const Vector2 clipPos = ToClipSpace(position.x, position.y, currentLogicalSize);
+            const Vector2 targetPoint = LogicalToTarget(position);
+            const Vector2 clipPos = ToClipSpace(targetPoint.x, targetPoint.y, currentTargetSize);
             vertices.push_back(GpuVertex{
                 {clipPos.x, clipPos.y},
                 {command.color.r, command.color.g, command.color.b, command.color.a},
@@ -1269,6 +1348,7 @@ private:
     int atlasRowHeight = 0;
     bool atlasOverflowLogged = false;
     Vector2 currentLogicalSize{1280.0F, 720.0F};
+    Vector2 currentTargetSize{1280.0F, 720.0F};
 };
 
 RenderQueueRenderer::RenderQueueRenderer(Device& device)
@@ -1300,14 +1380,14 @@ void RenderQueueRenderer::Shutdown()
     }
 }
 
-bool RenderQueueRenderer::Render(CommandBufferHandle commandBuffer, const RenderQueue& queue, Vector2 logicalSize)
+bool RenderQueueRenderer::Render(CommandBufferHandle commandBuffer, const RenderQueue& queue, Vector2 logicalSize, Vector2 targetSize)
 {
     if (impl_ == nullptr)
     {
         return false;
     }
 
-    return impl_->Render(commandBuffer, queue, logicalSize);
+    return impl_->Render(commandBuffer, queue, logicalSize, targetSize);
 }
 
 }

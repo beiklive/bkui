@@ -828,7 +828,7 @@ int main(int argc, char** argv)
             const auto presentStart = Clock::now();
             device->BeginFrame(swapchain, bk::RenderPassDesc{bk::ColorRGBA{0.03F, 0.04F, 0.06F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
-            if (!renderer.Render(commandBuffer, app.GetRenderQueue(), windowSize))
+            if (!renderer.Render(commandBuffer, app.GetRenderQueue(), app.GetLogicalSize(), windowSize))
             {
                 bklog.error("Failed to record UI draw commands.");
                 break;

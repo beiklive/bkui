@@ -600,6 +600,11 @@ float View::GetFlexShrink() const
 
 void View::SetScale(float scale)
 {
+    if (!std::isfinite(scale) || scale <= 0.0F)
+    {
+        scale_ = 1.0F;
+        return;
+    }
     scale_ = scale;
 }
 
