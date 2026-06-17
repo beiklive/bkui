@@ -281,7 +281,7 @@ bool ApplicationHost::InitializeApplication(const ApplicationHostDesc& desc, int
     const ApplicationDesc appDesc = ResolveApplicationDesc(desc);
     if (!application_.Initialize(appDesc, argc, argv))
     {
-        Logger::instance().Error("Unable to initialize bkui application.");
+        bklog.error("Unable to initialize bkui application.");
         return false;
     }
 
@@ -296,7 +296,7 @@ bool ApplicationHost::CreateWindowRuntime(const ApplicationHostDesc& desc)
     platform_ = CreateDefaultPlatform(appDesc.window);
     if (platform_ == nullptr || !platform_->Init())
     {
-        Logger::instance().Error("Unable to initialize platform.");
+        bklog.error("Unable to initialize platform.");
         return false;
     }
 
@@ -308,7 +308,7 @@ bool ApplicationHost::CreateWindowRuntime(const ApplicationHostDesc& desc)
 #endif
     if (device_ == nullptr || !device_->Init())
     {
-        Logger::instance().Error("Unable to initialize device.");
+        bklog.error("Unable to initialize device.");
         return false;
     }
 
@@ -318,14 +318,14 @@ bool ApplicationHost::CreateWindowRuntime(const ApplicationHostDesc& desc)
     commandBuffer_ = device_->CreateCommandBuffer();
     if (!IsValid(commandBuffer_))
     {
-        Logger::instance().Error("Unable to create command buffer.");
+        bklog.error("Unable to create command buffer.");
         return false;
     }
 
     renderer_ = std::make_unique<RenderQueueRenderer>(*device_);
     if (!renderer_->Initialize())
     {
-        Logger::instance().Error("Unable to initialize render queue renderer.");
+        bklog.error("Unable to initialize render queue renderer.");
         return false;
     }
 
@@ -349,7 +349,7 @@ bool ApplicationHost::PresentFrame()
     device_->BeginCommandBuffer(commandBuffer_);
     if (!renderer_->Render(commandBuffer_, application_.GetRenderQueue(), ResolveLogicalSize()))
     {
-        Logger::instance().Error("Failed to record UI draw commands.");
+        bklog.error("Failed to record UI draw commands.");
         return false;
     }
     device_->EndCommandBuffer(commandBuffer_);

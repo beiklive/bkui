@@ -1114,7 +1114,7 @@ int main(int argc, char** argv)
 
         bk::Application& app = host.GetApplication();
         app.SetPreserveInactiveFocusHighlights(true);
-        bk::Logger::instance().Info("bkui_demo: application initialized");
+        bklog.info("bkui_demo: application initialized");
 
         // 主页面是常驻层，先加入 Application，并请求默认焦点。
         auto page = std::make_shared<DemoPage>();
@@ -1156,17 +1156,17 @@ int main(int argc, char** argv)
         // 根据退出原因写不同日志，方便排查平台关闭还是应用主动退出。
         if (app.QuitRequested())
         {
-            bk::Logger::instance().Info("bkui_demo: loop ended because application requested quit");
+            bklog.info("bkui_demo: loop ended because application requested quit");
         }
         else if (const bk::Platform* platform = host.GetPlatform(); platform != nullptr && !platform->IsRunning())
         {
-            bk::Logger::instance().Warn("bkui_demo: loop ended because platform is no longer running");
+            bklog.warn("bkui_demo: loop ended because platform is no longer running");
         }
         else
         {
-            bk::Logger::instance().Warn("bkui_demo: loop ended unexpectedly");
+            bklog.warn("bkui_demo: loop ended unexpectedly");
         }
-        bk::Logger::instance().Info("bkui_demo: executed frames = " + std::to_string(executedFrames));
+        bklog.info("bkui_demo: executed frames = " + std::to_string(executedFrames));
 
         // 正常收尾：先停 Host，再关闭文件系统。
         host.Shutdown();

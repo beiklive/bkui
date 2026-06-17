@@ -144,7 +144,7 @@ bool I18n::LoadFile(std::string_view langCode)
     }
     catch (const std::exception& ex)
     {
-        Logger::instance().Warn("I18n: Failed to load " + path + ": " + ex.what());
+        bklog.warn("I18n: Failed to load " + path + ": " + ex.what());
     }
     return false;
 }
@@ -177,7 +177,7 @@ void I18n::Init(std::string_view resourceDir)
     if (LoadFile(lang))
     {
         currentLang_ = lang;
-        Logger::instance().Info("I18n: Loaded language " + lang);
+        bklog.info("I18n: Loaded language " + lang);
         return;
     }
 
@@ -189,7 +189,7 @@ void I18n::Init(std::string_view resourceDir)
         if (LoadFile(base))
         {
             currentLang_ = base;
-            Logger::instance().Info("I18n: Loaded language " + base);
+            bklog.info("I18n: Loaded language " + base);
             return;
         }
         dashPos = base.find('-');
@@ -201,7 +201,7 @@ void I18n::Init(std::string_view resourceDir)
         if (LoadFile("zh-CN"))
         {
             currentLang_ = "zh-CN";
-            Logger::instance().Info("I18n: Loaded language zh-CN (fallback)");
+            bklog.info("I18n: Loaded language zh-CN (fallback)");
             return;
         }
     }
@@ -209,13 +209,13 @@ void I18n::Init(std::string_view resourceDir)
     if (LoadFile("en"))
     {
         currentLang_ = "en";
-        Logger::instance().Info("I18n: Loaded language en (default)");
+        bklog.info("I18n: Loaded language en (default)");
         return;
     }
 
     currentLang_ = "en";
     translations_.clear();
-    Logger::instance().Warn("I18n: No translation files found in " + std::string(resourceDir) + "/, using raw keys.");
+    bklog.warn("I18n: No translation files found in " + std::string(resourceDir) + "/, using raw keys.");
 }
 
 void I18n::SetLanguage(std::string_view langCode)
@@ -229,11 +229,11 @@ void I18n::SetLanguage(std::string_view langCode)
     if (LoadFile(lang))
     {
         currentLang_ = lang;
-        Logger::instance().Info("I18n: Switched language to " + lang);
+        bklog.info("I18n: Switched language to " + lang);
     }
     else
     {
-        Logger::instance().Warn("I18n: Failed to switch language to " + lang);
+        bklog.warn("I18n: Failed to switch language to " + lang);
     }
 }
 

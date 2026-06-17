@@ -389,7 +389,7 @@ bool Application::Initialize(const ApplicationDesc& desc, int argc, const char* 
         bk::I18n::Instance().Init("i18n");
     }
 
-    if (!Logger::instance().Initialize(descriptor_.logger))
+    if (!bklog.Initialize(descriptor_.logger))
     {
         return false;
     }
@@ -397,7 +397,7 @@ bool Application::Initialize(const ApplicationDesc& desc, int argc, const char* 
     initialized_ = true;
     running_ = true;
     quitRequested_ = false;
-    Logger::instance().Info("Application initialized.");
+    bklog.info("Application initialized.");
     onInitialize_.Emit(*this);
     return true;
 }
@@ -410,10 +410,10 @@ void Application::Shutdown()
     }
 
     running_ = false;
-    Logger::instance().Info("Application shutting down.");
+    bklog.info("Application shutting down.");
     onShutdown_.Emit(*this);
     ResetState();
-    Logger::instance().Shutdown();
+    bklog.Shutdown();
 }
 
 void Application::RequestQuit()

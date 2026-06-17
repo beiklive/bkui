@@ -76,12 +76,12 @@ public:
     void Log(LogLevel level, std::string_view message);
 
     /// 便捷输出接口。
-    void Trace(std::string_view message);
-    void Debug(std::string_view message);
-    void Info(std::string_view message);
-    void Warn(std::string_view message);
-    void Error(std::string_view message);
-    void Fatal(std::string_view message);
+    void trace(std::string_view message);
+    void debug(std::string_view message);
+    void info(std::string_view message);
+    void warn(std::string_view message);
+    void error(std::string_view message);
+    void fatal(std::string_view message);
 
     /// 立刻刷新控制台和文件缓冲。
     void Flush();
@@ -105,5 +105,5 @@ private:
 
 }
 
-#define BKLog bk::Logger::instance()
+#define bklog bk::Logger::instance()
 

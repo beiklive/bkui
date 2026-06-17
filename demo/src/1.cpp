@@ -7,13 +7,13 @@ BK_MACRO_USE_I18N
 
 int main(int argc, char** argv)
 {
-    bk::Logger::instance().SetLogLevel(bk::Logger::LogLevel::Info);
-    bk::Logger::instance().Info("bkui_demo: starting up");
+    bklog.SetLevel(bk::LogLevel::Info);
+    bklog.info("bkui_demo: starting up");
 
     bk::ApplicationHost host;
     if (!host.Initialize(argc, argv))
     {
-        bk::Logger::instance().Error("bkui_demo: failed to initialize application host");
+        bklog.error("bkui_demo: failed to initialize application host");
         return 1;
     }
 

@@ -158,32 +158,32 @@ void Logger::Log(LogLevel level, std::string_view message)
     }
 }
 
-void Logger::Trace(std::string_view message)
+void Logger::trace(std::string_view message)
 {
     Log(LogLevel::Trace, message);
 }
 
-void Logger::Debug(std::string_view message)
+void Logger::debug(std::string_view message)
 {
     Log(LogLevel::Debug, message);
 }
 
-void Logger::Info(std::string_view message)
+void Logger::info(std::string_view message)
 {
     Log(LogLevel::Info, message);
 }
 
-void Logger::Warn(std::string_view message)
+void Logger::warn(std::string_view message)
 {
     Log(LogLevel::Warn, message);
 }
 
-void Logger::Error(std::string_view message)
+void Logger::error(std::string_view message)
 {
     Log(LogLevel::Error, message);
 }
 
-void Logger::Fatal(std::string_view message)
+void Logger::fatal(std::string_view message)
 {
     Log(LogLevel::Fatal, message);
 }

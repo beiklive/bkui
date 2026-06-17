@@ -531,7 +531,7 @@ public:
                 atlasPixels.data(),
             }))
             {
-                Logger::instance().Error("Failed to update font atlas texture.");
+                bklog.error("Failed to update font atlas texture.");
                 return false;
             }
             atlasDirty = false;
@@ -585,7 +585,7 @@ private:
 
         if (faces.empty())
         {
-            Logger::instance().Warn("RenderQueueRenderer did not load any platform fonts; text commands will be skipped.");
+            bklog.warn("RenderQueueRenderer did not load any platform fonts; text commands will be skipped.");
         }
     }
 
@@ -595,7 +595,7 @@ private:
         whiteTexture = device.CreateTexture(TextureDesc{1, 1, whitePixel.data()});
         if (!IsValid(whiteTexture))
         {
-            Logger::instance().Error("Failed to create UI white texture.");
+            bklog.error("Failed to create UI white texture.");
             return false;
         }
 
@@ -607,7 +607,7 @@ private:
         });
         if (!IsValid(fontAtlasTexture))
         {
-            Logger::instance().Error("Failed to create UI font atlas texture.");
+            bklog.error("Failed to create UI font atlas texture.");
             return false;
         }
 
@@ -657,7 +657,7 @@ private:
         fragmentShader = device.CreateShader(ShaderDesc{ShaderStage::Fragment, fragmentSource});
         if (!IsValid(vertexShader) || !IsValid(fragmentShader))
         {
-            Logger::instance().Error("Failed to create UI shaders.");
+            bklog.error("Failed to create UI shaders.");
             return false;
         }
 
@@ -675,7 +675,7 @@ private:
         });
         if (!IsValid(pipeline))
         {
-            Logger::instance().Error("Failed to create UI pipeline.");
+            bklog.error("Failed to create UI pipeline.");
             return false;
         }
 
@@ -744,7 +744,7 @@ private:
             {
                 if (!atlasOverflowLogged)
                 {
-                    Logger::instance().Warn("Font atlas is full; some glyphs may be missing.");
+                    bklog.warn("Font atlas is full; some glyphs may be missing.");
                     atlasOverflowLogged = true;
                 }
 
@@ -799,7 +799,7 @@ private:
             });
             if (!IsValid(vertexBuffer))
             {
-                Logger::instance().Error("Failed to allocate UI vertex buffer.");
+                bklog.error("Failed to allocate UI vertex buffer.");
                 return false;
             }
 
@@ -813,7 +813,7 @@ private:
             vertices.data(),
         }))
         {
-            Logger::instance().Error("Failed to upload UI vertices.");
+            bklog.error("Failed to upload UI vertices.");
             return false;
         }
 

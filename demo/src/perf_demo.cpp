@@ -722,7 +722,7 @@ int main(int argc, char** argv)
         bk::RenderQueueRenderer renderer(*device);
         if (!renderer.Initialize())
         {
-            bk::Logger::instance().Error("Failed to initialize RenderQueueRenderer.");
+            bklog.error("Failed to initialize RenderQueueRenderer.");
             return 1;
         }
 
@@ -730,7 +730,7 @@ int main(int argc, char** argv)
 
         if (!bk::IsValid(commandBuffer))
         {
-            bk::Logger::instance().Error("Failed to create GPU resources.");
+            bklog.error("Failed to create GPU resources.");
             return 1;
         }
 
@@ -790,7 +790,7 @@ int main(int argc, char** argv)
             {
                 mode = mode == RenderMode::FullRebuild ? RenderMode::DirtyRegion : RenderMode::FullRebuild;
                 page->SetMode(mode);
-                bk::Logger::instance().Info("Switched mode to " + ModeName(mode));
+                bklog.info("Switched mode to " + ModeName(mode));
             }
             togglePressed = toggleDown;
 
@@ -830,7 +830,7 @@ int main(int argc, char** argv)
             device->BeginCommandBuffer(commandBuffer);
             if (!renderer.Render(commandBuffer, app.GetRenderQueue(), windowSize))
             {
-                bk::Logger::instance().Error("Failed to record UI draw commands.");
+                bklog.error("Failed to record UI draw commands.");
                 break;
             }
             device->EndCommandBuffer(commandBuffer);
@@ -861,7 +861,7 @@ int main(int argc, char** argv)
                        << " present_ms=" << stats.avgPresentMs
                        << " boxes=" << stats.boxCount
                        << " commands=" << stats.commandCount;
-                bk::Logger::instance().Info(stream.str());
+                bklog.info(stream.str());
 
                 statsWindowStart = frameEnd;
                 statsFrameCount = 0;

@@ -655,7 +655,7 @@ protected:
         {
             std::ostringstream stream;
             stream << title_ << " bounced at (" << FormatFloat(frame.x) << ", " << FormatFloat(frame.y) << ")";
-            bk::Logger::instance().Debug(stream.str());
+            bklog.debug(stream.str());
         }
 
         SetFrame(frame);
@@ -1007,7 +1007,7 @@ int main(int argc, char** argv)
             return 1;
         }
 
-        bk::Logger::instance().Info(std::string("Graphics backend: ") + device->BackendName());
+        bklog.info(std::string("Graphics backend: ") + device->BackendName());
 
         const auto frameHeartbeat = bk::ScopedEventConnection(
             app.OnFrameBegin().Connect(
@@ -1016,14 +1016,14 @@ int main(int argc, char** argv)
                     {
                         std::ostringstream stream;
                         stream << "Frame heartbeat #" << frameIndex << " delta=" << FormatFloat(deltaSeconds, 3);
-                        bk::Logger::instance().Info(stream.str());
+                        bklog.info(stream.str());
                     }
                 }));
 
         const auto quitLog = bk::ScopedEventConnection(
             app.OnQuitRequested().Connect(
                 [](bk::Application&) {
-                    bk::Logger::instance().Info("Quit requested.");
+                    bklog.info("Quit requested.");
                 }));
 
         auto page = std::make_shared<DemoPage>();
@@ -1034,7 +1034,7 @@ int main(int argc, char** argv)
         bk::RenderQueueRenderer renderer(*device);
         if (!renderer.Initialize())
         {
-            bk::Logger::instance().Error("Failed to initialize RenderQueueRenderer.");
+            bklog.error("Failed to initialize RenderQueueRenderer.");
             return 1;
         }
 
@@ -1042,7 +1042,7 @@ int main(int argc, char** argv)
 
         if (!bk::IsValid(commandBuffer))
         {
-            bk::Logger::instance().Error("Failed to create demo GPU resources.");
+            bklog.error("Failed to create demo GPU resources.");
             return 1;
         }
 
@@ -1074,7 +1074,7 @@ int main(int argc, char** argv)
 
                 std::ostringstream stream;
                 stream << "Window resized to " << windowSize.x << "x" << windowSize.y;
-                bk::Logger::instance().Info(stream.str());
+                bklog.info(stream.str());
                 nextFrameTime = Clock::now();
             }
             else if (input.windowResized)
@@ -1093,7 +1093,7 @@ int main(int argc, char** argv)
             device->BeginCommandBuffer(commandBuffer);
             if (!renderer.Render(commandBuffer, app.GetRenderQueue(), windowSize))
             {
-                bk::Logger::instance().Error("Failed to record UI draw commands.");
+                bklog.error("Failed to record UI draw commands.");
                 break;
             }
             device->EndCommandBuffer(commandBuffer);
