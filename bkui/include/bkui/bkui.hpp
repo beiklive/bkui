@@ -3,8 +3,10 @@
 #include <bkui/render/backend/deko3d/Deko3DDevice.hpp>
 #include <bkui/render/backend/opengl/OpenGLDevice.hpp>
 #include <bkui/core/Application.hpp>
+#include <bkui/core/ApplicationHost.hpp>
 #include <bkui/core/Event.hpp>
 #include <bkui/core/FileSystem.hpp>
+#include <bkui/core/I18n.hpp>
 #include <bkui/core/Logger.hpp>
 #include <bkui/core/MetaData.hpp>
 #include <bkui/core/Types.hpp>

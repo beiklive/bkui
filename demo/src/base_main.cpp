@@ -20,6 +20,8 @@
 #include <utility>
 #include <vector>
 
+using bk::operator""_i18n;
+
 namespace
 {
 struct Vertex
@@ -1049,34 +1051,40 @@ Image BuildStatusPanel(const FontResource& font, const bk::InputState& input, co
     FillRect(panel, 0, 0, panel.width, 2, 88, 101, 242, 255);
     FillRect(panel, 0, panel.height - 1, panel.width, 1, 221, 226, 234, 255);
 
-    DrawText(panel, font, U"输入与 IME 状态", 20, 18, 28.0F, 24, 35, 52);
-    DrawText(panel, font, U"按 I 键可触发文本输入，Enter / A 可确认，Esc / B 可取消", 20, 50, 18.0F, 99, 111, 126);
+    DrawText(panel, font, "status_panel/title"_i18n.u32(), 20, 18, 28.0F, 24, 35, 52);
+    DrawText(panel, font, "status_panel/tip"_i18n.u32(), 20, 50, 18.0F, 99, 111, 126);
 
     const std::string pointerLine =
-        "Mouse: (" + FormatFloat(input.mousePosition.x) + ", " + FormatFloat(input.mousePosition.y) + ")" +
-        (input.mouseLeftDown ? "  L" : "") +
-        (input.mouseMiddleDown ? "  M" : "") +
-        (input.mouseRightDown ? "  R" : "");
+        "status_panel/mouse"_i18n(
+            FormatFloat(input.mousePosition.x),
+            FormatFloat(input.mousePosition.y),
+            std::string(input.mouseLeftDown ? "  L" : "") +
+                (input.mouseMiddleDown ? "  M" : "") +
+                (input.mouseRightDown ? "  R" : "")).str();
     DrawText(panel, font, ToUtf32(pointerLine), 20, 86, 20.0F, 32, 43, 58);
 
     std::string touchLine = "Touch: ";
     if (input.touchCount == 0)
     {
-        touchLine += "inactive";
+        touchLine = "status_panel/touch_inactive"_i18n.str();
     }
     else
     {
         const auto& touch = input.touchPoints[0];
-        touchLine += "#" + std::to_string(touch.id) + " (" + FormatFloat(touch.position.x) + ", " + FormatFloat(touch.position.y) + ")";
+        touchLine = "status_panel/touch_active"_i18n(
+                        std::to_string(touch.id),
+                        FormatFloat(touch.position.x),
+                        FormatFloat(touch.position.y))
+                        .str();
     }
     DrawText(panel, font, ToUtf32(touchLine), 20, 116, 20.0F, 32, 43, 58);
 
-    const std::string lastKey = std::string{"Last Key: "} +
-        (input.lastKeyEvent.name[0] != '\0' ? input.lastKeyEvent.name : "None") +
-        (input.lastKeyEvent.down ? " (down)" : (input.keyReleased ? " (up)" : ""));
+    const std::string lastKey = "status_panel/last_key"_i18n(
+        input.lastKeyEvent.name[0] != '\0' ? input.lastKeyEvent.name : "None",
+        std::string(input.lastKeyEvent.down ? " (down)" : (input.keyReleased ? " (up)" : ""))).str();
     DrawText(panel, font, ToUtf32(lastKey), 20, 146, 20.0F, 32, 43, 58);
 
-    const std::string heldKeys = "Held Keys: " + JoinKeys(input);
+    const std::string heldKeys = "status_panel/held_keys"_i18n(JoinKeys(input)).str();
     DrawText(panel, font, ToUtf32(heldKeys), 20, 176, 20.0F, 32, 43, 58);
 
     std::string imeLine = "IME: ";
@@ -1180,6 +1188,7 @@ int main(int argc, char** argv)
     {
         bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
         bk::FileSystem::Mount("resources");
+        bk::I18n::Instance().Init("i18n");
 
         auto platform = bk::CreateDefaultPlatform(bk::WindowDesc{
             "BeikUI Resource Demo",
@@ -1256,36 +1265,36 @@ int main(int argc, char** argv)
                 DrawText(bg, font, U"BK", avatarCenterX - 22, avatarCenterY - 18, 28.0F, 255, 255, 255);
             }
 
-            DrawText(bg, font, U"BeikUI 资源渲染演示", 208, 72, 34.0F, 255, 255, 255);
-            DrawText(bg, font, U"头像使用 PNG 资源，展示图片使用 SVG 并做旋转缩放变换", 208, 116, 22.0F, 186, 200, 216);
-            DrawText(bg, font, U"Avatar: images/beiklive.png", 208, 150, 20.0F, 120, 210, 255);
+            DrawText(bg, font, "app/title"_i18n.u32(), 208, 72, 34.0F, 255, 255, 255);
+            DrawText(bg, font, "app/subtitle"_i18n.u32(), 208, 116, 22.0F, 186, 200, 216);
+            DrawText(bg, font, "app/avatar"_i18n.u32(), 208, 150, 20.0F, 120, 210, 255);
 
             FillRect(bg, svgStageX, svgStageY, svgStageWidth, svgStageHeight, 236, 241, 247, 255);
             FillRect(bg, svgStageX + 10, svgStageY + 10, svgStageWidth - 20, svgStageHeight - 20, 251, 253, 255, 255);
-            DrawText(bg, font, U"SVG Showcase", 96, 218, 24.0F, 37, 53, 74);
-            DrawText(bg, font, U"Animated rotation + scale matrix transform", 96, 248, 18.0F, 94, 110, 129);
-            DrawText(bg, font, U"Asset: images/1.svg", 96, 614, 20.0F, 173, 188, 205);
-            DrawText(bg, font, U"Switch: Deko3D    Windows: OpenGL", 96, 646, 20.0F, 132, 149, 169);
+            DrawText(bg, font, "svg/showcase"_i18n.u32(), 96, 218, 24.0F, 37, 53, 74);
+            DrawText(bg, font, "svg/desc"_i18n.u32(), 96, 248, 18.0F, 94, 110, 129);
+            DrawText(bg, font, "svg/asset"_i18n.u32(), 96, 614, 20.0F, 173, 188, 205);
+            DrawText(bg, font, "svg/platform"_i18n.u32(), 96, 646, 20.0F, 132, 149, 169);
 
-            DrawText(bg, font, U"字体与图标能力", 656, 68, 34.0F, 24, 35, 52);
-            DrawText(bg, font, U"同一套通用字体接口，展示多语言文本和 Material Icons 回退链", 656, 108, 21.0F, 87, 100, 116);
+            DrawText(bg, font, "font/title"_i18n.u32(), 656, 68, 34.0F, 24, 35, 52);
+            DrawText(bg, font, "font/desc"_i18n.u32(), 656, 108, 21.0F, 87, 100, 116);
 
-            DrawText(bg, font, U"English: Resource and UI rendering", 656, 164, 24.0F, 31, 41, 55);
-            DrawText(bg, font, U"简体中文: 字体链与图像资源展示", 656, 210, 28.0F, 31, 41, 55);
-            DrawText(bg, font, U"繁體中文: 系統字型與回退測試", 656, 258, 28.0F, 31, 41, 55);
-            DrawText(bg, font, U"日本語: システムフォント対応", 656, 306, 28.0F, 31, 41, 55);
-            DrawText(bg, font, U"한국어: 폰트 폴백 테스트", 656, 354, 28.0F, 31, 41, 55);
+            DrawText(bg, font, "font/english"_i18n.u32(), 656, 164, 24.0F, 31, 41, 55);
+            DrawText(bg, font, "font/zh_cn"_i18n.u32(), 656, 210, 28.0F, 31, 41, 55);
+            DrawText(bg, font, "font/zh_tw"_i18n.u32(), 656, 258, 28.0F, 31, 41, 55);
+            DrawText(bg, font, "font/ja"_i18n.u32(), 656, 306, 28.0F, 31, 41, 55);
+            DrawText(bg, font, "font/ko"_i18n.u32(), 656, 354, 28.0F, 31, 41, 55);
 
-            DrawText(bg, font, U"Material Icons", 656, 408, 24.0F, 24, 35, 52);
+            DrawText(bg, font, "icon/title"_i18n.u32(), 656, 408, 24.0F, 24, 35, 52);
             DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 442, 20.0F, 37, 99, 235);
             DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 480, 34.0F, 0, 150, 136);
             DrawText(bg, font, U"\uE88A  \uE87C  \uE8B8  \uE87D", 656, 536, 52.0F, 220, 68, 55);
-            DrawText(bg, font, U"\uE88A home    \uE8B8 settings    \uE87D favorite", 656, 604, 22.0F, 107, 120, 138);
+            DrawText(bg, font, "icon/hint"_i18n.u32(), 656, 604, 22.0F, 107, 120, 138);
 
             FillRect(bg, dragLayerX - 12, dragLayerY - 12, dragLayerWidth + 24, dragLayerHeight + 24, 236, 241, 247, 255);
             FillRect(bg, dragLayerX - 2, dragLayerY - 2, dragLayerWidth + 4, dragLayerHeight + 4, 220, 226, 234, 255);
-            DrawText(bg, font, U"Draggable Square", dragLayerX - 2, dragLayerY - 44, 24.0F, 24, 35, 52);
-            DrawText(bg, font, U"Mouse / touch drag test", dragLayerX - 2, dragLayerY - 16, 18.0F, 99, 111, 126);
+            DrawText(bg, font, "drag/title"_i18n.u32(), dragLayerX - 2, dragLayerY - 44, 24.0F, 24, 35, 52);
+            DrawText(bg, font, "drag/desc"_i18n.u32(), dragLayerX - 2, dragLayerY - 16, 18.0F, 99, 111, 126);
             return bg;
         }();
 

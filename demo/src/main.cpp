@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -13,12 +12,13 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
+
 namespace
 {
+using bk::operator""_i18n;
 using demo::EnsureWindowSize;
 constexpr float kDesignWidth = 1280.0F;
 constexpr float kDesignHeight = 720.0F;
@@ -142,12 +142,12 @@ public:
         dialog_->SetPaddingLeft(24.0F);
         dialog_->SetSpacing(14.0F);
 
-        title_ = MakeLabel("Detail View", 30.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
-        subtitle_ = MakeLabel("这是一个新的顶层 View。支持聚焦、导航、点击和关闭。", 17.0F, bk::Color{0.77F, 0.84F, 0.93F, 1.0F});
+        title_ = MakeLabel("modal/title"_i18n.str(), 30.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
+        subtitle_ = MakeLabel("modal/subtitle"_i18n.str(), 17.0F, bk::Color{0.77F, 0.84F, 0.93F, 1.0F});
         modalFocusLabel_ = MakeLabel("", 16.0F, bk::Color{0.93F, 0.95F, 0.99F, 1.0F});
         modalDefaultLabel_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
         modalLastLabel_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
-        modalActionLabel_ = MakeLabel("Action: Ready", 16.0F, bk::Color{0.98F, 0.85F, 0.50F, 1.0F});
+        modalActionLabel_ = MakeLabel("modal/action_ready"_i18n.str(), 16.0F, bk::Color{0.98F, 0.85F, 0.50F, 1.0F});
 
         topRow_ = std::make_shared<bk::HBox>();
         topRow_->SetName("ModalTopRow");
@@ -158,20 +158,20 @@ public:
         bottomRow_->SetSpacing(12.0F);
 
         primaryButton_ = MakeButton(
-            "Confirm",
-            "记录一次点击并保留当前焦点。",
+            "modal/confirm"_i18n.str(),
+            "modal/confirm_hint"_i18n.str(),
             bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
         secondaryButton_ = MakeButton(
-            "Go Default",
-            "请求当前弹层的默认焦点。",
+            "modal/go_default"_i18n.str(),
+            "modal/go_default_hint"_i18n.str(),
             bk::Color{0.18F, 0.67F, 0.53F, 1.0F});
         lastFocusButton_ = MakeButton(
-            "Go Last",
-            "回到弹层内上一次聚焦的按钮。",
+            "modal/go_last"_i18n.str(),
+            "modal/go_last_hint"_i18n.str(),
             bk::Color{0.77F, 0.48F, 0.24F, 1.0F});
         closeButton_ = MakeButton(
-            "Close View",
-            "关闭当前 View 并回到主页面。",
+            "modal/close"_i18n.str(),
+            "modal/close_hint"_i18n.str(),
             bk::Color{0.78F, 0.32F, 0.36F, 1.0F});
 
         primaryButton_->SetCallback([this](ActionButton&) {
@@ -232,9 +232,9 @@ public:
 
     void SyncStatus(const bk::Application& app)
     {
-        modalFocusLabel_->SetText("Focused: " + DisplayName(app.GetFocusedView()));
-        modalDefaultLabel_->SetText("Default: " + DisplayName(GetDefaultFocusView()));
-        modalLastLabel_->SetText("Last: " + DisplayName(GetLastFocusedView()));
+        modalFocusLabel_->SetText("modal/focused"_i18n(DisplayName(app.GetFocusedView())).str());
+        modalDefaultLabel_->SetText("modal/default_val"_i18n(DisplayName(GetDefaultFocusView())).str());
+        modalLastLabel_->SetText("modal/last"_i18n(DisplayName(GetLastFocusedView())).str());
     }
 
     void Layout() override
@@ -292,7 +292,7 @@ private:
 
     void SetAction(std::string action)
     {
-        modalActionLabel_->SetText("Action: " + std::move(action));
+        modalActionLabel_->SetText("modal/action"_i18n(std::move(action)).str());
     }
 
     std::shared_ptr<bk::VBox> dialog_;
@@ -345,11 +345,11 @@ public:
         headerText_->SetName("HeaderText");
         headerText_->SetSpacing(6.0F);
         headerText_->SetFlexGrow(1.0F);
-        headerTitle_ = MakeLabel("BeikUI Focus / View Demo", 33.0F, bk::Color{0.98F, 0.99F, 1.0F, 1.0F});
-        headerSubtitle_ = MakeLabel("1280 x 720 fixed layout, hierarchy, focus navigation and click-to-open view.", 17.0F, bk::Color{0.77F, 0.84F, 0.93F, 1.0F});
+        headerTitle_ = MakeLabel("page/title"_i18n.str(), 33.0F, bk::Color{0.98F, 0.99F, 1.0F, 1.0F});
+        headerSubtitle_ = MakeLabel("page/subtitle"_i18n.str(), 17.0F, bk::Color{0.77F, 0.84F, 0.93F, 1.0F});
         headerText_->AddChild(headerTitle_);
         headerText_->AddChild(headerSubtitle_);
-        headerHint_ = MakeLabel("Arrow / Tab navigation, Enter/A activate, mouse/touch click.", 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
+        headerHint_ = MakeLabel("page/hint"_i18n.str(), 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
         headerHint_->SetWidth(360.0F);
         headerBar_->AddChild(headerText_);
         headerBar_->AddChild(headerHint_);
@@ -365,11 +365,11 @@ public:
         leftColumn_->SetSpacing(18.0F);
 
         navPanel_ = MakePanel("NavPanel", bk::Color{0.93F, 0.95F, 0.99F, 1.0F});
-        navTitle_ = MakeLabel("Main View", 24.0F, bk::Color{0.10F, 0.14F, 0.21F, 1.0F});
-        navTip_ = MakeLabel("点击按钮或用方向键切换焦点。", 16.0F, bk::Color{0.31F, 0.38F, 0.49F, 1.0F});
-        navHome_ = MakeActionButton("Home", "主页面默认焦点。", bk::Color{0.22F, 0.49F, 0.93F, 1.0F});
-        navGallery_ = MakeActionButton("Gallery", "示例内容区域。", bk::Color{0.20F, 0.64F, 0.55F, 1.0F});
-        openModalButton_ = MakeActionButton("Open Detail View", "点击后创建新的顶层 View。", bk::Color{0.79F, 0.45F, 0.26F, 1.0F});
+        navTitle_ = MakeLabel("nav/title"_i18n.str(), 24.0F, bk::Color{0.10F, 0.14F, 0.21F, 1.0F});
+        navTip_ = MakeLabel("nav/tip"_i18n.str(), 16.0F, bk::Color{0.31F, 0.38F, 0.49F, 1.0F});
+        navHome_ = MakeActionButton("nav/home"_i18n.str(), "nav/home_hint"_i18n.str(), bk::Color{0.22F, 0.49F, 0.93F, 1.0F});
+        navGallery_ = MakeActionButton("nav/gallery"_i18n.str(), "nav/gallery_hint"_i18n.str(), bk::Color{0.20F, 0.64F, 0.55F, 1.0F});
+        openModalButton_ = MakeActionButton("nav/open_modal"_i18n.str(), "nav/open_modal_hint"_i18n.str(), bk::Color{0.79F, 0.45F, 0.26F, 1.0F});
         openModalButton_->SetMarginTop(4.0F);
         navPanel_->AddChild(navTitle_);
         navPanel_->AddChild(navTip_);
@@ -378,18 +378,18 @@ public:
         navPanel_->AddChild(openModalButton_);
 
         focusPanel_ = MakePanel("FocusPanel", bk::Color{0.14F, 0.18F, 0.28F, 1.0F});
-        focusTitle_ = MakeLabel("Focus Controls", 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
-        focusTip_ = MakeLabel("演示默认焦点、上次焦点和调试线框。", 16.0F, bk::Color{0.78F, 0.84F, 0.93F, 1.0F});
-        focusDefaultButton_ = MakeActionButton("Go Default", "请求主页面默认焦点。", bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
-        focusLastButton_ = MakeActionButton("Go Last", "请求主页面上次焦点。", bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
-        focusClearButton_ = MakeActionButton("Clear Focus", "清除主页面当前焦点。", bk::Color{0.72F, 0.34F, 0.39F, 1.0F});
-        focusWireframeButton_ = MakeActionButton("Wireframe Off", "切换 margin / frame / padding 调试线框。", bk::Color{0.43F, 0.40F, 0.86F, 1.0F});
-        focusMotionButton_ = MakeActionButton("Focus Motion On", "切换聚焦框移动动画。", bk::Color{0.86F, 0.36F, 0.72F, 1.0F});
-        focusLayerTrailButton_ = MakeActionButton("Layer Trail On", "弹出新层时保留旧层聚焦框。", bk::Color{0.34F, 0.62F, 0.88F, 1.0F});
-        focusThemeLabel_ = MakeLabel("Focus Theme: Aurora", 15.0F, bk::Color{0.84F, 0.89F, 0.97F, 1.0F});
-        focusThemeAuroraButton_ = MakeActionButton("Theme Aurora", "蓝紫流光。", bk::Color{0.24F, 0.52F, 0.95F, 1.0F});
-        focusThemeSunsetButton_ = MakeActionButton("Theme Sunset", "暖色脉冲。", bk::Color{0.92F, 0.46F, 0.34F, 1.0F});
-        focusThemeMintButton_ = MakeActionButton("Theme Mint", "青绿霓光。", bk::Color{0.22F, 0.72F, 0.64F, 1.0F});
+        focusTitle_ = MakeLabel("focus/title"_i18n.str(), 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
+        focusTip_ = MakeLabel("focus/tip"_i18n.str(), 16.0F, bk::Color{0.78F, 0.84F, 0.93F, 1.0F});
+        focusDefaultButton_ = MakeActionButton("focus/go_default"_i18n.str(), "focus/go_default_hint"_i18n.str(), bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
+        focusLastButton_ = MakeActionButton("focus/go_last"_i18n.str(), "focus/go_last_hint"_i18n.str(), bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
+        focusClearButton_ = MakeActionButton("focus/clear"_i18n.str(), "focus/clear_hint"_i18n.str(), bk::Color{0.72F, 0.34F, 0.39F, 1.0F});
+        focusWireframeButton_ = MakeActionButton("focus/wireframe_off"_i18n.str(), "focus/wireframe_hint"_i18n.str(), bk::Color{0.43F, 0.40F, 0.86F, 1.0F});
+        focusMotionButton_ = MakeActionButton("focus/motion_on"_i18n.str(), "focus/motion_hint"_i18n.str(), bk::Color{0.86F, 0.36F, 0.72F, 1.0F});
+        focusLayerTrailButton_ = MakeActionButton("focus/trail_on"_i18n.str(), "focus/trail_hint"_i18n.str(), bk::Color{0.34F, 0.62F, 0.88F, 1.0F});
+        focusThemeLabel_ = MakeLabel("focus/theme_label"_i18n("Aurora").str(), 15.0F, bk::Color{0.84F, 0.89F, 0.97F, 1.0F});
+        focusThemeAuroraButton_ = MakeActionButton("focus/theme_aurora"_i18n.str(), "focus/theme_aurora_hint"_i18n.str(), bk::Color{0.24F, 0.52F, 0.95F, 1.0F});
+        focusThemeSunsetButton_ = MakeActionButton("focus/theme_sunset"_i18n.str(), "focus/theme_sunset_hint"_i18n.str(), bk::Color{0.92F, 0.46F, 0.34F, 1.0F});
+        focusThemeMintButton_ = MakeActionButton("focus/theme_mint"_i18n.str(), "focus/theme_mint_hint"_i18n.str(), bk::Color{0.22F, 0.72F, 0.64F, 1.0F});
         focusPanel_->AddChild(focusTitle_);
         focusPanel_->AddChild(focusTip_);
         focusPanel_->AddChild(focusDefaultButton_);
@@ -403,8 +403,19 @@ public:
         focusPanel_->AddChild(focusThemeSunsetButton_);
         focusPanel_->AddChild(focusThemeMintButton_);
 
+        langPanel_ = MakePanel("LangPanel", bk::Color{0.14F, 0.18F, 0.28F, 1.0F});
+        langTitle_ = MakeLabel("lang/title"_i18n.str(), 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
+        langHint_ = MakeLabel("lang/hint"_i18n.str(), 16.0F, bk::Color{0.78F, 0.84F, 0.93F, 1.0F});
+        langZhButton_ = MakeActionButton("lang/zh"_i18n.str(), "lang/zh_hint"_i18n.str(), bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
+        langEnButton_ = MakeActionButton("lang/en"_i18n.str(), "lang/en_hint"_i18n.str(), bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
+        langPanel_->AddChild(langTitle_);
+        langPanel_->AddChild(langHint_);
+        langPanel_->AddChild(langZhButton_);
+        langPanel_->AddChild(langEnButton_);
+
         leftColumn_->AddChild(navPanel_);
         leftColumn_->AddChild(focusPanel_);
+        leftColumn_->AddChild(langPanel_);
 
         rightColumn_ = std::make_shared<bk::VBox>();
         rightColumn_->SetName("RightColumn");
@@ -412,13 +423,13 @@ public:
         rightColumn_->SetSpacing(18.0F);
 
         statusPanel_ = MakePanel("StatusPanel", bk::Color{0.11F, 0.15F, 0.23F, 1.0F});
-        statusTitle_ = MakeLabel("Status", 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
+        statusTitle_ = MakeLabel("status/title"_i18n.str(), 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
         statusFocus_ = MakeLabel("", 16.0F, bk::Color{0.94F, 0.96F, 1.0F, 1.0F});
         statusDefault_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
         statusLast_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
         statusPointer_ = MakeLabel("", 16.0F, bk::Color{0.80F, 0.86F, 0.95F, 1.0F});
-        statusKey_ = MakeLabel("Key: idle", 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
-        statusAction_ = MakeLabel("Action: Ready", 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
+        statusKey_ = MakeLabel("status/key_idle"_i18n.str(), 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
+        statusAction_ = MakeLabel("status/action_ready"_i18n.str(), 16.0F, bk::Color{0.98F, 0.85F, 0.51F, 1.0F});
         statusModal_ = MakeLabel("Top Views: 1", 16.0F, bk::Color{0.76F, 0.83F, 0.92F, 1.0F});
         statusPanel_->AddChild(statusTitle_);
         statusPanel_->AddChild(statusFocus_);
@@ -436,8 +447,8 @@ public:
 
         treePanel_ = MakePanel("TreePanel", bk::Color{0.93F, 0.95F, 0.99F, 1.0F});
         treePanel_->SetWidth(338.0F);
-        treeTitle_ = MakeLabel("Hierarchy", 23.0F, bk::Color{0.10F, 0.14F, 0.21F, 1.0F});
-        treeSubtitle_ = MakeLabel("当前顶层 View 与子树结构。", 16.0F, bk::Color{0.31F, 0.38F, 0.49F, 1.0F});
+        treeTitle_ = MakeLabel("tree/title"_i18n.str(), 23.0F, bk::Color{0.10F, 0.14F, 0.21F, 1.0F});
+        treeSubtitle_ = MakeLabel("tree/subtitle"_i18n.str(), 16.0F, bk::Color{0.31F, 0.38F, 0.49F, 1.0F});
         treePanel_->AddChild(treeTitle_);
         treePanel_->AddChild(treeSubtitle_);
         for (int index = 0; index < 16; ++index)
@@ -450,8 +461,8 @@ public:
 
         actionPanel_ = MakePanel("ActionPanel", bk::Color{0.14F, 0.18F, 0.28F, 1.0F});
         actionPanel_->SetFlexGrow(1.0F);
-        actionTitle_ = MakeLabel("Interactive Zone", 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
-        actionSubtitle_ = MakeLabel("这里演示同层导航、手动跨层导航和点击反馈。", 16.0F, bk::Color{0.78F, 0.84F, 0.93F, 1.0F});
+        actionTitle_ = MakeLabel("action/title"_i18n.str(), 24.0F, bk::Color{0.97F, 0.98F, 1.0F, 1.0F});
+        actionSubtitle_ = MakeLabel("action/subtitle"_i18n.str(), 16.0F, bk::Color{0.78F, 0.84F, 0.93F, 1.0F});
         actionRowTop_ = std::make_shared<bk::HBox>();
         actionRowTop_->SetName("ActionRowTop");
         actionRowTop_->SetSpacing(12.0F);
@@ -459,10 +470,10 @@ public:
         actionRowBottom_->SetName("ActionRowBottom");
         actionRowBottom_->SetSpacing(12.0F);
 
-        cardOverview_ = MakeActionButton("Overview", "更新状态并标记一次点击。", bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
-        cardMetrics_ = MakeActionButton("Metrics", "展示页面树与焦点信息。", bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
-        cardOpenModal_ = MakeActionButton("Open Modal", "内容区也可以打开新的 View。", bk::Color{0.79F, 0.45F, 0.26F, 1.0F});
-        cardRestoreFocus_ = MakeActionButton("Restore Focus", "请求主页面记录的上一次焦点。", bk::Color{0.44F, 0.41F, 0.86F, 1.0F});
+        cardOverview_ = MakeActionButton("action/overview"_i18n.str(), "action/overview_hint"_i18n.str(), bk::Color{0.23F, 0.50F, 0.95F, 1.0F});
+        cardMetrics_ = MakeActionButton("action/metrics"_i18n.str(), "action/metrics_hint"_i18n.str(), bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
+        cardOpenModal_ = MakeActionButton("action/open_modal"_i18n.str(), "action/open_modal_hint"_i18n.str(), bk::Color{0.79F, 0.45F, 0.26F, 1.0F});
+        cardRestoreFocus_ = MakeActionButton("action/restore_focus"_i18n.str(), "action/restore_focus_hint"_i18n.str(), bk::Color{0.44F, 0.41F, 0.86F, 1.0F});
 
         actionRowTop_->AddChild(cardOverview_);
         actionRowTop_->AddChild(cardMetrics_);
@@ -496,27 +507,32 @@ public:
     void SyncStatus(const bk::Application& app, const bk::InputState& input, const bk::Vector2& windowSize)
     {
         const bk::Vector2 pointer = input.touchCount > 0 ? input.touchPoints[0].position : input.mousePosition;
-        statusFocus_->SetText("Focused: " + DisplayName(app.GetFocusedView()));
-        statusDefault_->SetText("Default: " + DisplayName(GetDefaultFocusView()));
-        statusLast_->SetText("Last: " + DisplayName(GetLastFocusedView()));
+        statusFocus_->SetText("status/focused"_i18n(DisplayName(app.GetFocusedView())).str());
+        statusDefault_->SetText("status/default_val"_i18n(DisplayName(GetDefaultFocusView())).str());
+        statusLast_->SetText("status/last"_i18n(DisplayName(GetLastFocusedView())).str());
         statusPointer_->SetText(
-            "Pointer: (" + demo::FormatFloat(pointer.x, 0) + ", " + demo::FormatFloat(pointer.y, 0) +
-            ")   Window: " + std::to_string(static_cast<int>(windowSize.x)) +
-            " x " + std::to_string(static_cast<int>(windowSize.y)));
-        statusModal_->SetText("Top Views: " + std::to_string(app.GetViews().size()) + "   Root frame: 1280 x 720");
+            "status/pointer"_i18n(
+                demo::FormatFloat(pointer.x, 0),
+                demo::FormatFloat(pointer.y, 0),
+                std::to_string(static_cast<int>(windowSize.x)),
+                std::to_string(static_cast<int>(windowSize.y))).str());
+        statusModal_->SetText("status/top_views"_i18n(std::to_string(app.GetViews().size())).str());
 
-        if (input.keyPressed || input.keyReleased)
+        if (input.keyPressed)
         {
-            std::string state = input.keyPressed ? "pressed " : "released ";
-            statusKey_->SetText("Key: " + state + input.lastKeyEvent.name);
+            statusKey_->SetText("status/key_pressed"_i18n(input.lastKeyEvent.name).str());
+        }
+        else if (input.keyReleased)
+        {
+            statusKey_->SetText("status/key_released"_i18n(input.lastKeyEvent.name).str());
         }
         else if (input.mouseLeftPressed)
         {
-            statusKey_->SetText("Key: mouse click");
+            statusKey_->SetText("status/key_mouse"_i18n.str());
         }
         else if (input.touchCount > 0 && input.touchPoints[0].pressed)
         {
-            statusKey_->SetText("Key: touch tap");
+            statusKey_->SetText("status/key_touch"_i18n.str());
         }
 
         std::vector<std::string> lines;
@@ -582,7 +598,7 @@ public:
     {
         wireframeEnabled_ = enabled;
         SetDebugWireframeRecursive(shared_from_this(), enabled);
-        focusWireframeButton_->SetText(enabled ? "Wireframe On" : "Wireframe Off");
+        focusWireframeButton_->SetText(enabled ? "focus/wireframe_on"_i18n.str() : "focus/wireframe_off"_i18n.str());
     }
 
     void Layout() override
@@ -651,7 +667,7 @@ private:
 
     void SetAction(std::string action)
     {
-        statusAction_->SetText("Action: " + std::move(action));
+        statusAction_->SetText("status/action"_i18n(std::move(action)).str());
     }
 
     void ApplyFocusTheme(const std::string& name, const bk::Color& color1, const bk::Color& color2)
@@ -670,7 +686,7 @@ private:
         if (bk::Application* app = bk::Application::Active())
         {
             const bool enabled = app->IsFocusHighlightMotionEnabled();
-            focusMotionButton_->SetText(enabled ? "Focus Motion On" : "Focus Motion Off");
+            focusMotionButton_->SetText(enabled ? "focus/motion_on"_i18n.str() : "focus/motion_off"_i18n.str());
         }
     }
 
@@ -679,13 +695,52 @@ private:
         if (bk::Application* app = bk::Application::Active())
         {
             const bool enabled = app->IsPreservingInactiveFocusHighlights();
-            focusLayerTrailButton_->SetText(enabled ? "Layer Trail On" : "Layer Trail Off");
+            focusLayerTrailButton_->SetText(enabled ? "focus/trail_on"_i18n.str() : "focus/trail_off"_i18n.str());
         }
     }
 
     void SyncFocusThemeLabel()
     {
-        focusThemeLabel_->SetText("Focus Theme: " + currentFocusThemeName_);
+        focusThemeLabel_->SetText("focus/theme_label"_i18n(currentFocusThemeName_).str());
+    }
+
+    void RefreshTexts()
+    {
+        headerTitle_->SetText("page/title"_i18n.str());
+        headerSubtitle_->SetText("page/subtitle"_i18n.str());
+        headerHint_->SetText("page/hint"_i18n.str());
+        navTitle_->SetText("nav/title"_i18n.str());
+        navTip_->SetText("nav/tip"_i18n.str());
+        navHome_->SetText("nav/home"_i18n.str());
+        navGallery_->SetText("nav/gallery"_i18n.str());
+        openModalButton_->SetText("nav/open_modal"_i18n.str());
+        focusTitle_->SetText("focus/title"_i18n.str());
+        focusTip_->SetText("focus/tip"_i18n.str());
+        focusDefaultButton_->SetText("focus/go_default"_i18n.str());
+        focusLastButton_->SetText("focus/go_last"_i18n.str());
+        focusClearButton_->SetText("focus/clear"_i18n.str());
+        focusThemeAuroraButton_->SetText("focus/theme_aurora"_i18n.str());
+        focusThemeSunsetButton_->SetText("focus/theme_sunset"_i18n.str());
+        focusThemeMintButton_->SetText("focus/theme_mint"_i18n.str());
+        SyncFocusThemeLabel();
+        SyncFocusMotionButton();
+        SyncFocusLayerTrailButton();
+        ApplyWireframe(wireframeEnabled_);
+        statusTitle_->SetText("status/title"_i18n.str());
+        statusKey_->SetText("status/key_idle"_i18n.str());
+        statusAction_->SetText("status/action_ready"_i18n.str());
+        treeTitle_->SetText("tree/title"_i18n.str());
+        treeSubtitle_->SetText("tree/subtitle"_i18n.str());
+        actionTitle_->SetText("action/title"_i18n.str());
+        actionSubtitle_->SetText("action/subtitle"_i18n.str());
+        cardOverview_->SetText("action/overview"_i18n.str());
+        cardMetrics_->SetText("action/metrics"_i18n.str());
+        cardOpenModal_->SetText("action/open_modal"_i18n.str());
+        cardRestoreFocus_->SetText("action/restore_focus"_i18n.str());
+        langTitle_->SetText("lang/title"_i18n.str());
+        langHint_->SetText("lang/hint"_i18n.str());
+        langZhButton_->SetText("lang/zh"_i18n.str());
+        langEnButton_->SetText("lang/en"_i18n.str());
     }
 
     void BindCallbacks()
@@ -755,6 +810,17 @@ private:
                 bk::Color{0.42F, 1.0F, 0.86F, 1.0F},
                 bk::Color{0.20F, 0.66F, 1.0F, 1.0F});
             SetAction("Focus theme switched to Mint");
+        });
+
+        langZhButton_->SetCallback([this](ActionButton&) {
+            bk::I18n::Instance().SetLanguage("zh-CN");
+            RefreshTexts();
+            SetAction("Language switched to Simplified Chinese");
+        });
+        langEnButton_->SetCallback([this](ActionButton&) {
+            bk::I18n::Instance().SetLanguage("en");
+            RefreshTexts();
+            SetAction("Language switched to English");
         });
 
         cardOverview_->SetCallback([this](ActionButton&) {
@@ -851,6 +917,11 @@ private:
     std::shared_ptr<ActionButton> focusThemeAuroraButton_;
     std::shared_ptr<ActionButton> focusThemeSunsetButton_;
     std::shared_ptr<ActionButton> focusThemeMintButton_;
+    std::shared_ptr<bk::VBox> langPanel_;
+    std::shared_ptr<bk::Label> langTitle_;
+    std::shared_ptr<bk::Label> langHint_;
+    std::shared_ptr<ActionButton> langZhButton_;
+    std::shared_ptr<ActionButton> langEnButton_;
     std::shared_ptr<bk::VBox> rightColumn_;
     std::shared_ptr<bk::VBox> statusPanel_;
     std::shared_ptr<bk::Label> statusTitle_;
@@ -890,120 +961,59 @@ int main(int argc, char** argv)
         std::fprintf(stdout, "bkui_demo: startup begin\n");
         bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
         bk::FileSystem::Mount("resources");
+        bk::I18n::Instance().Init("i18n");
         std::fprintf(stdout, "bkui_demo: filesystem ready\n");
 
-        auto platform = bk::CreateDefaultPlatform(bk::WindowDesc{
-            "BeikUI Focus Demo",
-            static_cast<int>(kDesignWidth),
-            static_cast<int>(kDesignHeight),
-        });
-        if (!platform->Init())
-        {
-            std::fprintf(stderr, "Failed to initialize platform.\n");
-            return 1;
-        }
-        std::fprintf(stdout, "bkui_demo: platform ready\n");
-
-        auto device =
-#if defined(BKUI_PLATFORM_SWITCH)
-            bk::CreateDeko3DDevice(*platform);
-#else
-            bk::CreateOpenGLDevice(*platform);
-#endif
-
-        if (!device->Init())
-        {
-            std::fprintf(stderr, "Graphics backend unavailable: %s\n", device->BackendName());
-            return 1;
-        }
-        std::fprintf(stdout, "bkui_demo: device ready: %s\n", device->BackendName());
-
-        bk::Application app;
-        bk::ApplicationDesc appDesc;
-        appDesc.name = "BeikUI Focus Demo";
-        appDesc.version = "0.3.0";
-        appDesc.identifier = "bkui.demo.focus_view";
-        appDesc.logger.level = bk::LogLevel::Debug;
-        appDesc.logger.enableConsole = true;
-        appDesc.logger.enableColor =
+        bk::ApplicationHost host;
+        bk::ApplicationHostDesc hostDesc;
+        hostDesc.window.title = "BeikUI Focus Demo";
+        hostDesc.window.width = static_cast<int>(kDesignWidth);
+        hostDesc.window.height = static_cast<int>(kDesignHeight);
+        hostDesc.logicalSize = bk::Vector2{kDesignWidth, kDesignHeight};
+        hostDesc.clearColor = bk::Color{0.03F, 0.04F, 0.08F, 1.0F};
+        hostDesc.application.name = "BeikUI Focus Demo";
+        hostDesc.application.version = "0.3.0";
+        hostDesc.application.identifier = "bkui.demo.focus_view";
+        hostDesc.application.logger.level = bk::LogLevel::Debug;
+        hostDesc.application.logger.enableConsole = true;
+        hostDesc.application.logger.enableColor =
 #if defined(BKUI_PLATFORM_SWITCH)
             false;
 #else
             true;
 #endif
-        appDesc.logger.flushEachMessage =
+        hostDesc.application.logger.flushEachMessage =
 #if defined(BKUI_PLATFORM_SWITCH)
             true;
 #else
             false;
 #endif
-#if defined(BKUI_PLATFORM_SWITCH)
-        appDesc.logger.filePath = "bkui_focus_demo.log";
-#else
-        appDesc.logger.filePath = "bkui_focus_demo.log";
-#endif
-        if (!app.Initialize(appDesc, argc, const_cast<const char* const*>(argv)))
+        hostDesc.application.logger.filePath = "bkui_focus_demo.log";
+
+        if (!host.Initialize(hostDesc, argc, argv))
         {
-            std::fprintf(stderr, "Failed to initialize application context.\n");
+            std::fprintf(stderr, "Failed to initialize demo host.\n");
             return 1;
         }
+
+        bk::Application& app = host.GetApplication();
         app.SetPreserveInactiveFocusHighlights(true);
         bk::Logger::instance().Info("bkui_demo: application initialized");
         app.SetFocusHighlightCornerRadius(1.0F);
+
         auto page = std::make_shared<DemoPage>();
         page->SetFrame(bk::Rect{0.0F, 0.0F, kDesignWidth, kDesignHeight});
+        page->SetWindowSize(EnsureWindowSize(host.GetWindowSize()));
         app.AddView(page);
         page->RequestDefaultFocus();
 
-        bk::RenderQueueRenderer renderer(*device);
-        if (!renderer.Initialize())
-        {
-            bk::Logger::instance().Error("Failed to initialize RenderQueueRenderer.");
-            return 1;
-        }
-        bk::Logger::instance().Info("bkui_demo: render queue renderer initialized");
-
-        bk::CommandBufferHandle commandBuffer = device->CreateCommandBuffer();
-
-        if (!bk::IsValid(commandBuffer))
-        {
-            bk::Logger::instance().Error("Failed to create demo GPU resources.");
-            return 1;
-        }
-        bk::Logger::instance().Info("bkui_demo: command buffer created");
-
-        using Clock = std::chrono::steady_clock;
-        const float fixedDeltaSeconds = 1.0F / 60.0F;
-        const auto frameDuration = std::chrono::duration<double>(fixedDeltaSeconds);
-        auto nextFrameTime = Clock::now();
-        bk::SwapchainHandle swapchain = device->GetMainSwapchain();
         std::shared_ptr<DemoModalView> modal;
 
-        while (platform->IsRunning() && app.IsRunning())
-        {
-            std::this_thread::sleep_until(nextFrameTime);
-            nextFrameTime += std::chrono::duration_cast<Clock::duration>(frameDuration);
+        host.OnResize().Connect([page](bk::ApplicationHost&, bk::Vector2 size) {
+            page->SetWindowSize(EnsureWindowSize(size));
+        });
 
-            platform->PollEvents();
-            const bk::InputState input = platform->GetInput();
-            if (input.quitRequested)
-            {
-                bk::Logger::instance().Info("bkui_demo: quit requested by platform");
-                app.RequestQuit();
-            }
-
-            if (input.windowResized)
-            {
-                device->Resize(EnsureWindowSize(platform->GetWindowSize()));
-            }
-
-            page->SetWindowSize(EnsureWindowSize(platform->GetWindowSize()));
-            app.SetInputState(input);
-            if (!app.RunFrame(fixedDeltaSeconds, true))
-            {
-                break;
-            }
-
+        host.OnFrameEnd().Connect([&](bk::ApplicationHost&, float, std::uint64_t) {
             if (!modal && page->ConsumeOpenModalRequest())
             {
                 modal = std::make_shared<DemoModalView>();
@@ -1020,24 +1030,19 @@ int main(int argc, char** argv)
                 modal.reset();
                 page->RequestLastFocus();
             }
+        });
 
-            device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.03F, 0.04F, 0.08F, 1.0F}});
-            device->BeginCommandBuffer(commandBuffer);
-            if (!renderer.Render(commandBuffer, app.GetRenderQueue(), bk::Vector2{kDesignWidth, kDesignHeight}))
-            {
-                bk::Logger::instance().Error("Failed to record UI draw commands.");
-                break;
-            }
-            device->EndCommandBuffer(commandBuffer);
-            device->Submit(commandBuffer);
-            device->EndFrame(swapchain);
-        }
+        bk::MainLoopDesc loopDesc;
+        loopDesc.fixedDeltaSeconds = 1.0F / 60.0F;
+        loopDesc.useFixedDelta = true;
+        loopDesc.synchronizeToFixedDelta = true;
+        const std::uint64_t executedFrames = host.MainLoop(loopDesc);
 
         if (app.QuitRequested())
         {
             bk::Logger::instance().Info("bkui_demo: loop ended because application requested quit");
         }
-        else if (!platform->IsRunning())
+        else if (const bk::Platform* platform = host.GetPlatform(); platform != nullptr && !platform->IsRunning())
         {
             bk::Logger::instance().Warn("bkui_demo: loop ended because platform is no longer running");
         }
@@ -1045,13 +1050,9 @@ int main(int argc, char** argv)
         {
             bk::Logger::instance().Warn("bkui_demo: loop ended unexpectedly");
         }
+        bk::Logger::instance().Info("bkui_demo: executed frames = " + std::to_string(executedFrames));
 
-        device->DestroyCommandBuffer(commandBuffer);
-        renderer.Shutdown();
-
-        app.Shutdown();
-        device->Shutdown();
-        platform->Shutdown();
+        host.Shutdown();
         bk::FileSystem::Shutdown();
     }
     catch (const std::exception& ex)

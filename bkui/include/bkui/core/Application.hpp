@@ -34,6 +34,7 @@ struct MainLoopDesc
     float fixedDeltaSeconds = 1.0F / 60.0F;
     std::uint64_t maxFrames = 0;
     bool useFixedDelta = true;
+    bool synchronizeToFixedDelta = true;
     bool clearRenderQueueEachFrame = true;
 };
 

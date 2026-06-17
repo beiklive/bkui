@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "task1: build windows",
+      "type": "shell",
+      "command": "${workspaceFolder}\\build_windows.bat",
+      "problemMatcher": []
+    },
+    {
+      "label": "task2: run windows",
+      "type": "shell",
+      "command": "bkui_demo.exe",
+      "options": {
+        "cwd": "${workspaceFolder}\\build\\windows\\bin"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "task3: build and run",
+      "dependsOn": [
+        "task1: build windows",
+        "task2: run windows"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    }
+  ]
+}
