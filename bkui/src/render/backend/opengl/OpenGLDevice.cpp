@@ -595,6 +595,8 @@ public:
         }
 
         Resize(platform_.GetWindowSize());
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glClearColor(renderPass.clearColor.r, renderPass.clearColor.g, renderPass.clearColor.b, renderPass.clearColor.a);
         glClear(GL_COLOR_BUFFER_BIT);
     }

@@ -1,5 +1,6 @@
 #include "switch_platform_internal.hpp"
 
+#include <cstdio>
 #include <memory>
 #include <utility>
 
@@ -17,17 +18,22 @@ public:
 
     bool Init() override
     {
+        std::fprintf(stdout, "switch platform: init begin\n");
         if (!sw::InitVideo())
         {
+            std::fprintf(stderr, "switch platform: InitVideo failed\n");
             return false;
         }
         if (!sw::InitAudio() || !sw::InitIme(imeManager_) || !sw::InitInput(pad_))
         {
+            std::fprintf(stderr, "switch platform: subsystem init failed\n");
             Shutdown();
             return false;
         }
 
         running_ = true;
+        const Vector2 size = sw::GetWindowSize();
+        std::fprintf(stdout, "switch platform: init ok window=%.0fx%.0f\n", size.x, size.y);
         return true;
     }
 
@@ -38,6 +44,7 @@ public:
 
     void Shutdown() override
     {
+        std::fprintf(stdout, "switch platform: shutdown\n");
         sw::ShutdownInput();
         sw::ShutdownIme();
         sw::ShutdownAudio();

@@ -1009,12 +1009,6 @@ int main(int argc, char** argv)
 
         bk::Logger::instance().Info(std::string("Graphics backend: ") + device->BackendName());
 
-        const FontResource& font = GlobalFont();
-        if (!font.Valid())
-        {
-            bk::Logger::instance().Warn("Platform font load failed, text overlay may be empty.");
-        }
-
         const auto frameHeartbeat = bk::ScopedEventConnection(
             app.OnFrameBegin().Connect(
                 [](bk::Application&, float deltaSeconds, std::uint64_t frameIndex) {
@@ -1037,72 +1031,16 @@ int main(int argc, char** argv)
         page->SetFrame(bk::Rect{0.0F, 0.0F, windowSize.x, windowSize.y});
         app.AddView(page);
 
-        const std::array<Vertex, 6> quadVertices = MakeFullscreenQuad();
-        const char* vertexShaderSource =
-#if defined(BKUI_PLATFORM_SWITCH)
-            "shaders/deko_triangle_vsh.dksh";
-#else
-            R"(
-            #version 330 core
-            layout(location = 0) in vec2 inPosition;
-            layout(location = 1) in vec3 inColor;
-            layout(location = 2) in vec2 inTexCoord;
-            out vec3 vertexColor;
-            out vec2 texCoord;
-            void main()
-            {
-                vertexColor = inColor;
-                texCoord = inTexCoord;
-                gl_Position = vec4(inPosition, 0.0, 1.0);
-            }
-        )";
-#endif
-        const char* fragmentShaderSource =
-#if defined(BKUI_PLATFORM_SWITCH)
-            "shaders/deko_triangle_fsh.dksh";
-#else
-            R"(
-            #version 330 core
-            in vec3 vertexColor;
-            in vec2 texCoord;
-            uniform sampler2D uTexture;
-            out vec4 outColor;
-            void main()
-            {
-                outColor = texture(uTexture, texCoord) * vec4(vertexColor, 1.0);
-            }
-        )";
-#endif
+        bk::RenderQueueRenderer renderer(*device);
+        if (!renderer.Initialize())
+        {
+            bk::Logger::instance().Error("Failed to initialize RenderQueueRenderer.");
+            return 1;
+        }
 
-        bk::BufferHandle quadBuffer = device->CreateBuffer(bk::BufferDesc{
-            bk::BufferUsage::Vertex,
-            sizeof(Vertex) * quadVertices.size(),
-            quadVertices.data(),
-        });
-        bk::ShaderHandle vertexShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Vertex, vertexShaderSource});
-        bk::ShaderHandle fragmentShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Fragment, fragmentShaderSource});
-        const std::array<bk::VertexAttributeDesc, 3> attributes = {{
-            {0, bk::VertexFormat::Float2, offsetof(Vertex, position)},
-            {1, bk::VertexFormat::Float3, offsetof(Vertex, color)},
-            {2, bk::VertexFormat::Float2, offsetof(Vertex, uv)},
-        }};
-        bk::PipelineHandle pipeline = device->CreatePipeline(bk::PipelineDesc{
-            vertexShader,
-            fragmentShader,
-            bk::VertexLayoutDesc{sizeof(Vertex), attributes.data(), attributes.size()},
-            bk::PrimitiveTopology::Triangles,
-        });
         bk::CommandBufferHandle commandBuffer = device->CreateCommandBuffer();
 
-        Image frameImage = MakeImage(static_cast<int>(windowSize.x), static_cast<int>(windowSize.y), 0, 0, 0, 255);
-        bk::TextureHandle frameTexture = device->CreateTexture(bk::TextureDesc{
-            static_cast<std::uint32_t>(frameImage.width),
-            static_cast<std::uint32_t>(frameImage.height),
-            frameImage.pixels.data(),
-        });
-
-        if (!bk::IsValid(quadBuffer) || !bk::IsValid(vertexShader) || !bk::IsValid(fragmentShader) ||
-            !bk::IsValid(pipeline) || !bk::IsValid(commandBuffer) || !bk::IsValid(frameTexture))
+        if (!bk::IsValid(commandBuffer))
         {
             bk::Logger::instance().Error("Failed to create demo GPU resources.");
             return 1;
@@ -1114,38 +1052,6 @@ int main(int argc, char** argv)
         const auto frameDuration = std::chrono::duration<double>(fixedDeltaSeconds);
         bk::SwapchainHandle swapchain = device->GetMainSwapchain();
         auto nextFrameTime = Clock::now();
-        auto buildStaticLayer = [&](const bk::Vector2& size) {
-            Image layer = MakeImage(static_cast<int>(size.x), static_cast<int>(size.y), 11, 16, 24, 255);
-            bk::RenderQueue staticQueue;
-            page->DrawStatic(staticQueue);
-            RenderQueueToImage(layer, font, staticQueue);
-            return layer;
-        };
-
-        Image staticLayer = buildStaticLayer(windowSize);
-        frameImage = staticLayer;
-
-        auto renderFullFrame = [&](Image& target) {
-            page->SyncStatus(app, platform->GetInput(), device->BackendName());
-            app.SetInputState(platform->GetInput());
-            app.RunFrame(0.0F, true);
-            target = staticLayer;
-            RenderQueueToImage(target, font, app.GetRenderQueue());
-            return device->UpdateTexture(frameTexture, bk::TextureDesc{
-                static_cast<std::uint32_t>(target.width),
-                static_cast<std::uint32_t>(target.height),
-                target.pixels.data(),
-            });
-        };
-
-        if (!renderFullFrame(frameImage))
-        {
-            bk::Logger::instance().Error("Failed to upload initial frame texture.");
-            return 1;
-        }
-
-        IntRect previousDynamicRect = page->GetMovingRegionRect();
-        IntRect previousStatusRect = page->GetStatusPanelRect();
 
         while (platform->IsRunning() && app.IsRunning())
         {
@@ -1164,22 +1070,7 @@ int main(int argc, char** argv)
             {
                 windowSize = latestWindowSize;
                 page->SetFrame(bk::Rect{0.0F, 0.0F, windowSize.x, windowSize.y});
-                frameImage = MakeImage(static_cast<int>(windowSize.x), static_cast<int>(windowSize.y), 0, 0, 0, 255);
                 device->Resize(windowSize);
-                device->DestroyTexture(frameTexture);
-                frameTexture = device->CreateTexture(bk::TextureDesc{
-                    static_cast<std::uint32_t>(frameImage.width),
-                    static_cast<std::uint32_t>(frameImage.height),
-                    frameImage.pixels.data(),
-                });
-                staticLayer = buildStaticLayer(windowSize);
-                if (!renderFullFrame(frameImage))
-                {
-                    bk::Logger::instance().Error("Failed to upload resized frame texture.");
-                    break;
-                }
-                previousDynamicRect = page->GetMovingRegionRect();
-                previousStatusRect = page->GetStatusPanelRect();
 
                 std::ostringstream stream;
                 stream << "Window resized to " << windowSize.x << "x" << windowSize.y;
@@ -1198,54 +1089,20 @@ int main(int argc, char** argv)
                 break;
             }
 
-            const IntRect currentDynamicRect = page->GetMovingRegionRect();
-            const IntRect currentStatusRect = page->GetStatusPanelRect();
-            const IntRect dirtyRect = ClampRectToImage(
-                frameImage,
-                UnionRect(
-                    UnionRect(previousDynamicRect, currentDynamicRect),
-                    UnionRect(previousStatusRect, currentStatusRect)));
-
-            if (dirtyRect.width > 0 && dirtyRect.height > 0)
-            {
-                BlitRect(frameImage, staticLayer, dirtyRect);
-                RenderQueueToImage(frameImage, font, app.GetRenderQueue(), dirtyRect);
-            }
-
-            const Image dirtyRegion = ExtractRegion(frameImage, dirtyRect);
-            if (dirtyRect.width > 0 && dirtyRect.height > 0 &&
-                !device->UpdateTextureRegion(frameTexture, bk::TextureRegionDesc{
-                    static_cast<std::uint32_t>(dirtyRect.x),
-                    static_cast<std::uint32_t>(dirtyRect.y),
-                    static_cast<std::uint32_t>(dirtyRect.width),
-                    static_cast<std::uint32_t>(dirtyRect.height),
-                    dirtyRegion.pixels.data(),
-                }))
-            {
-                bk::Logger::instance().Error("Failed to upload frame texture region.");
-                break;
-            }
-
-            previousDynamicRect = currentDynamicRect;
-            previousStatusRect = currentStatusRect;
-
             device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.04F, 0.05F, 0.08F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
-            device->BindPipeline(commandBuffer, pipeline);
-            device->BindVertexBuffer(commandBuffer, quadBuffer);
-            device->BindTexture(commandBuffer, frameTexture);
-            device->Draw(commandBuffer, static_cast<std::uint32_t>(quadVertices.size()));
+            if (!renderer.Render(commandBuffer, app.GetRenderQueue(), windowSize))
+            {
+                bk::Logger::instance().Error("Failed to record UI draw commands.");
+                break;
+            }
             device->EndCommandBuffer(commandBuffer);
             device->Submit(commandBuffer);
             device->EndFrame(swapchain);
         }
 
-        device->DestroyTexture(frameTexture);
         device->DestroyCommandBuffer(commandBuffer);
-        device->DestroyPipeline(pipeline);
-        device->DestroyShader(fragmentShader);
-        device->DestroyShader(vertexShader);
-        device->DestroyBuffer(quadBuffer);
+        renderer.Shutdown();
 
         app.Shutdown();
         device->Shutdown();

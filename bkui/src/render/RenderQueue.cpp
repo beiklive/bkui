@@ -19,6 +19,25 @@ void RenderQueue::PushRect(const Rect& bounds, const Color& color)
         color,
         {},
         0.0F,
+        {},
+        {},
+        1.5F,
+        0.0F,
+    });
+}
+
+void RenderQueue::PushRoundedRect(const Rect& bounds, const Color& color, float cornerRadius)
+{
+    commands_.push_back(RenderCommand{
+        RenderCommandType::RoundedRect,
+        bounds,
+        color,
+        {},
+        0.0F,
+        {},
+        {},
+        1.5F,
+        std::max(0.0F, cornerRadius),
     });
 }
 
@@ -32,10 +51,12 @@ void RenderQueue::PushText(const Rect& bounds, std::string text, float fontSize,
         fontSize,
         {},
         {},
+        1.5F,
+        0.0F,
     });
 }
 
-void RenderQueue::PushLine(const Vector2& start, const Vector2& end, const Color& color)
+void RenderQueue::PushLine(const Vector2& start, const Vector2& end, const Color& color, float thickness)
 {
     const float left = std::min(start.x, end.x);
     const float top = std::min(start.y, end.y);
@@ -50,6 +71,8 @@ void RenderQueue::PushLine(const Vector2& start, const Vector2& end, const Color
         0.0F,
         start,
         end,
+        std::max(0.1F, thickness),
+        0.0F,
     });
 }
 
@@ -63,6 +86,8 @@ void RenderQueue::PushClipRect(const Rect& bounds)
         0.0F,
         {},
         {},
+        1.5F,
+        0.0F,
     });
 }
 
@@ -76,6 +101,8 @@ void RenderQueue::PopClipRect()
         0.0F,
         {},
         {},
+        1.5F,
+        0.0F,
     });
 }
 

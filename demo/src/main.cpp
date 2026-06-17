@@ -20,14 +20,6 @@
 namespace
 {
 using demo::EnsureWindowSize;
-using demo::FontResource;
-using demo::GlobalFont;
-using demo::Image;
-using demo::MakeFullscreenQuad;
-using demo::MakeImage;
-using demo::RenderQueueToImage;
-using demo::Vertex;
-
 constexpr float kDesignWidth = 1280.0F;
 constexpr float kDesignHeight = 720.0F;
 
@@ -76,6 +68,12 @@ public:
     {
         SetPadding(14.0F);
         SetMinHeight(92.0F);
+        SetCornerRadius(16.0F);
+        SetShadowEnabled(true);
+        SetShadowOffset(0.0F, 8.0F);
+        SetShadowBlurRadius(14.0F);
+        SetShadowSpread(2.0F);
+        SetShadowColor(bk::Color{0.0F, 0.0F, 0.0F, 0.18F});
     }
 
     void SetSubtitle(std::string subtitle)
@@ -94,22 +92,6 @@ public:
         bk::Box::Draw(queue);
 
         const bk::Rect content = GetContentFrame();
-        if (HasFocus())
-        {
-            queue.PushRect(
-                bk::Rect{frame_.x, frame_.y, frame_.width, 3.0F},
-                bk::Color{1.0F, 1.0F, 1.0F, 0.95F});
-            queue.PushRect(
-                bk::Rect{frame_.x, frame_.y + frame_.height - 3.0F, frame_.width, 3.0F},
-                bk::Color{1.0F, 1.0F, 1.0F, 0.95F});
-            queue.PushRect(
-                bk::Rect{frame_.x, frame_.y, 3.0F, frame_.height},
-                bk::Color{1.0F, 1.0F, 1.0F, 0.95F});
-            queue.PushRect(
-                bk::Rect{frame_.x + frame_.width - 3.0F, frame_.y, 3.0F, frame_.height},
-                bk::Color{1.0F, 1.0F, 1.0F, 0.95F});
-        }
-
         queue.PushText(
             bk::Rect{content.x, content.y, content.width, 28.0F},
             GetText(),
@@ -148,6 +130,12 @@ public:
         dialog_->SetName("ModalDialog");
         dialog_->SetDrawBackground(true);
         dialog_->SetBackgroundColor(bk::Color{0.12F, 0.15F, 0.23F, 1.0F});
+        dialog_->SetCornerRadius(24.0F);
+        dialog_->SetShadowEnabled(true);
+        dialog_->SetShadowOffset(0.0F, 18.0F);
+        dialog_->SetShadowBlurRadius(24.0F);
+        dialog_->SetShadowSpread(4.0F);
+        dialog_->SetShadowColor(bk::Color{0.0F, 0.0F, 0.0F, 0.26F});
         dialog_->SetPaddingTop(22.0F);
         dialog_->SetPaddingRight(24.0F);
         dialog_->SetPaddingBottom(22.0F);
@@ -396,12 +384,24 @@ public:
         focusLastButton_ = MakeActionButton("Go Last", "请求主页面上次焦点。", bk::Color{0.20F, 0.68F, 0.52F, 1.0F});
         focusClearButton_ = MakeActionButton("Clear Focus", "清除主页面当前焦点。", bk::Color{0.72F, 0.34F, 0.39F, 1.0F});
         focusWireframeButton_ = MakeActionButton("Wireframe Off", "切换 margin / frame / padding 调试线框。", bk::Color{0.43F, 0.40F, 0.86F, 1.0F});
+        focusMotionButton_ = MakeActionButton("Focus Motion On", "切换聚焦框移动动画。", bk::Color{0.86F, 0.36F, 0.72F, 1.0F});
+        focusLayerTrailButton_ = MakeActionButton("Layer Trail On", "弹出新层时保留旧层聚焦框。", bk::Color{0.34F, 0.62F, 0.88F, 1.0F});
+        focusThemeLabel_ = MakeLabel("Focus Theme: Aurora", 15.0F, bk::Color{0.84F, 0.89F, 0.97F, 1.0F});
+        focusThemeAuroraButton_ = MakeActionButton("Theme Aurora", "蓝紫流光。", bk::Color{0.24F, 0.52F, 0.95F, 1.0F});
+        focusThemeSunsetButton_ = MakeActionButton("Theme Sunset", "暖色脉冲。", bk::Color{0.92F, 0.46F, 0.34F, 1.0F});
+        focusThemeMintButton_ = MakeActionButton("Theme Mint", "青绿霓光。", bk::Color{0.22F, 0.72F, 0.64F, 1.0F});
         focusPanel_->AddChild(focusTitle_);
         focusPanel_->AddChild(focusTip_);
         focusPanel_->AddChild(focusDefaultButton_);
         focusPanel_->AddChild(focusLastButton_);
         focusPanel_->AddChild(focusClearButton_);
         focusPanel_->AddChild(focusWireframeButton_);
+        focusPanel_->AddChild(focusMotionButton_);
+        focusPanel_->AddChild(focusLayerTrailButton_);
+        focusPanel_->AddChild(focusThemeLabel_);
+        focusPanel_->AddChild(focusThemeAuroraButton_);
+        focusPanel_->AddChild(focusThemeSunsetButton_);
+        focusPanel_->AddChild(focusThemeMintButton_);
 
         leftColumn_->AddChild(navPanel_);
         leftColumn_->AddChild(focusPanel_);
@@ -606,6 +606,9 @@ protected:
         if (bk::Application* app = bk::Application::Active())
         {
             SyncStatus(*app, app->GetInputState(), windowSize_);
+            SyncFocusMotionButton();
+            SyncFocusLayerTrailButton();
+            SyncFocusThemeLabel();
         }
     }
 
@@ -624,6 +627,12 @@ private:
         panel->SetName(name);
         panel->SetDrawBackground(true);
         panel->SetBackgroundColor(color);
+        panel->SetCornerRadius(22.0F);
+        panel->SetShadowEnabled(true);
+        panel->SetShadowOffset(0.0F, 10.0F);
+        panel->SetShadowBlurRadius(16.0F);
+        panel->SetShadowSpread(2.0F);
+        panel->SetShadowColor(bk::Color{0.0F, 0.0F, 0.0F, 0.16F});
         panel->SetPaddingTop(18.0F);
         panel->SetPaddingRight(18.0F);
         panel->SetPaddingBottom(18.0F);
@@ -643,6 +652,40 @@ private:
     void SetAction(std::string action)
     {
         statusAction_->SetText("Action: " + std::move(action));
+    }
+
+    void ApplyFocusTheme(const std::string& name, const bk::Color& color1, const bk::Color& color2)
+    {
+        currentFocusThemeName_ = name;
+        if (bk::Application* app = bk::Application::Active())
+        {
+            app->SetFocusHighlightColor1(color1);
+            app->SetFocusHighlightColor2(color2);
+        }
+        SyncFocusThemeLabel();
+    }
+
+    void SyncFocusMotionButton()
+    {
+        if (bk::Application* app = bk::Application::Active())
+        {
+            const bool enabled = app->IsFocusHighlightMotionEnabled();
+            focusMotionButton_->SetText(enabled ? "Focus Motion On" : "Focus Motion Off");
+        }
+    }
+
+    void SyncFocusLayerTrailButton()
+    {
+        if (bk::Application* app = bk::Application::Active())
+        {
+            const bool enabled = app->IsPreservingInactiveFocusHighlights();
+            focusLayerTrailButton_->SetText(enabled ? "Layer Trail On" : "Layer Trail Off");
+        }
+    }
+
+    void SyncFocusThemeLabel()
+    {
+        focusThemeLabel_->SetText("Focus Theme: " + currentFocusThemeName_);
     }
 
     void BindCallbacks()
@@ -673,6 +716,45 @@ private:
         focusWireframeButton_->SetCallback([this](ActionButton&) {
             ApplyWireframe(!wireframeEnabled_);
             SetAction(wireframeEnabled_ ? "Wireframe enabled" : "Wireframe disabled");
+        });
+        focusMotionButton_->SetCallback([this](ActionButton&) {
+            if (bk::Application* app = bk::Application::Active())
+            {
+                const bool enabled = !app->IsFocusHighlightMotionEnabled();
+                app->SetFocusHighlightMotionEnabled(enabled);
+                SyncFocusMotionButton();
+                SetAction(enabled ? "Focus motion enabled" : "Focus motion disabled");
+            }
+        });
+        focusLayerTrailButton_->SetCallback([this](ActionButton&) {
+            if (bk::Application* app = bk::Application::Active())
+            {
+                const bool enabled = !app->IsPreservingInactiveFocusHighlights();
+                app->SetPreserveInactiveFocusHighlights(enabled);
+                SyncFocusLayerTrailButton();
+                SetAction(enabled ? "Layer focus trail enabled" : "Layer focus trail disabled");
+            }
+        });
+        focusThemeAuroraButton_->SetCallback([this](ActionButton&) {
+            ApplyFocusTheme(
+                "Aurora",
+                bk::Color{0.34F, 0.76F, 1.0F, 1.0F},
+                bk::Color{0.76F, 0.52F, 1.0F, 1.0F});
+            SetAction("Focus theme switched to Aurora");
+        });
+        focusThemeSunsetButton_->SetCallback([this](ActionButton&) {
+            ApplyFocusTheme(
+                "Sunset",
+                bk::Color{1.0F, 0.72F, 0.34F, 1.0F},
+                bk::Color{1.0F, 0.36F, 0.56F, 1.0F});
+            SetAction("Focus theme switched to Sunset");
+        });
+        focusThemeMintButton_->SetCallback([this](ActionButton&) {
+            ApplyFocusTheme(
+                "Mint",
+                bk::Color{0.42F, 1.0F, 0.86F, 1.0F},
+                bk::Color{0.20F, 0.66F, 1.0F, 1.0F});
+            SetAction("Focus theme switched to Mint");
         });
 
         cardOverview_->SetCallback([this](ActionButton&) {
@@ -710,7 +792,22 @@ private:
         focusClearButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusWireframeButton_);
         focusClearButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardOpenModal_);
         focusWireframeButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusClearButton_);
+        focusWireframeButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusMotionButton_);
         focusWireframeButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
+        focusMotionButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusWireframeButton_);
+        focusMotionButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusLayerTrailButton_);
+        focusMotionButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
+        focusLayerTrailButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusMotionButton_);
+        focusLayerTrailButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusThemeAuroraButton_);
+        focusLayerTrailButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
+        focusThemeAuroraButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusLayerTrailButton_);
+        focusThemeAuroraButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusThemeSunsetButton_);
+        focusThemeAuroraButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
+        focusThemeSunsetButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusThemeAuroraButton_);
+        focusThemeSunsetButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusThemeMintButton_);
+        focusThemeSunsetButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
+        focusThemeMintButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusThemeSunsetButton_);
+        focusThemeMintButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
 
         cardOverview_->SetNavigationTarget(bk::NavigationDirection::Left, focusDefaultButton_);
         cardOverview_->SetNavigationTarget(bk::NavigationDirection::Right, cardMetrics_);
@@ -723,7 +820,7 @@ private:
         cardOpenModal_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
         cardRestoreFocus_->SetNavigationTarget(bk::NavigationDirection::Up, cardMetrics_);
         cardRestoreFocus_->SetNavigationTarget(bk::NavigationDirection::Left, cardOpenModal_);
-        cardRestoreFocus_->SetNavigationTarget(bk::NavigationDirection::Right, focusWireframeButton_);
+        cardRestoreFocus_->SetNavigationTarget(bk::NavigationDirection::Right, focusMotionButton_);
     }
 
     std::shared_ptr<bk::VBox> rootColumn_;
@@ -748,6 +845,12 @@ private:
     std::shared_ptr<ActionButton> focusLastButton_;
     std::shared_ptr<ActionButton> focusClearButton_;
     std::shared_ptr<ActionButton> focusWireframeButton_;
+    std::shared_ptr<ActionButton> focusMotionButton_;
+    std::shared_ptr<ActionButton> focusLayerTrailButton_;
+    std::shared_ptr<bk::Label> focusThemeLabel_;
+    std::shared_ptr<ActionButton> focusThemeAuroraButton_;
+    std::shared_ptr<ActionButton> focusThemeSunsetButton_;
+    std::shared_ptr<ActionButton> focusThemeMintButton_;
     std::shared_ptr<bk::VBox> rightColumn_;
     std::shared_ptr<bk::VBox> statusPanel_;
     std::shared_ptr<bk::Label> statusTitle_;
@@ -772,6 +875,7 @@ private:
     std::shared_ptr<ActionButton> cardMetrics_;
     std::shared_ptr<ActionButton> cardOpenModal_;
     std::shared_ptr<ActionButton> cardRestoreFocus_;
+    std::string currentFocusThemeName_{"Aurora"};
     bool openModalRequested_ = false;
     bool wireframeEnabled_ = false;
     bk::Vector2 windowSize_{kDesignWidth, kDesignHeight};
@@ -783,8 +887,10 @@ int main(int argc, char** argv)
 {
     try
     {
+        std::fprintf(stdout, "bkui_demo: startup begin\n");
         bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
         bk::FileSystem::Mount("resources");
+        std::fprintf(stdout, "bkui_demo: filesystem ready\n");
 
         auto platform = bk::CreateDefaultPlatform(bk::WindowDesc{
             "BeikUI Focus Demo",
@@ -796,6 +902,7 @@ int main(int argc, char** argv)
             std::fprintf(stderr, "Failed to initialize platform.\n");
             return 1;
         }
+        std::fprintf(stdout, "bkui_demo: platform ready\n");
 
         auto device =
 #if defined(BKUI_PLATFORM_SWITCH)
@@ -809,6 +916,7 @@ int main(int argc, char** argv)
             std::fprintf(stderr, "Graphics backend unavailable: %s\n", device->BackendName());
             return 1;
         }
+        std::fprintf(stdout, "bkui_demo: device ready: %s\n", device->BackendName());
 
         bk::Application app;
         bk::ApplicationDesc appDesc;
@@ -817,95 +925,52 @@ int main(int argc, char** argv)
         appDesc.identifier = "bkui.demo.focus_view";
         appDesc.logger.level = bk::LogLevel::Debug;
         appDesc.logger.enableConsole = true;
-        appDesc.logger.enableColor = true;
+        appDesc.logger.enableColor =
+#if defined(BKUI_PLATFORM_SWITCH)
+            false;
+#else
+            true;
+#endif
+        appDesc.logger.flushEachMessage =
+#if defined(BKUI_PLATFORM_SWITCH)
+            true;
+#else
+            false;
+#endif
+#if defined(BKUI_PLATFORM_SWITCH)
         appDesc.logger.filePath = "bkui_focus_demo.log";
+#else
+        appDesc.logger.filePath = "bkui_focus_demo.log";
+#endif
         if (!app.Initialize(appDesc, argc, const_cast<const char* const*>(argv)))
         {
             std::fprintf(stderr, "Failed to initialize application context.\n");
             return 1;
         }
-
-        const FontResource& font = GlobalFont();
-        if (!font.Valid())
-        {
-            bk::Logger::instance().Warn("Platform font load failed, text overlay may be empty.");
-        }
-
+        app.SetPreserveInactiveFocusHighlights(true);
+        bk::Logger::instance().Info("bkui_demo: application initialized");
+        app.SetFocusHighlightCornerRadius(1.0F);
         auto page = std::make_shared<DemoPage>();
         page->SetFrame(bk::Rect{0.0F, 0.0F, kDesignWidth, kDesignHeight});
         app.AddView(page);
         page->RequestDefaultFocus();
 
-        const std::array<Vertex, 6> quadVertices = MakeFullscreenQuad();
-        const char* vertexShaderSource =
-#if defined(BKUI_PLATFORM_SWITCH)
-            "shaders/deko_triangle_vsh.dksh";
-#else
-            R"(
-            #version 330 core
-            layout(location = 0) in vec2 inPosition;
-            layout(location = 1) in vec3 inColor;
-            layout(location = 2) in vec2 inTexCoord;
-            out vec3 vertexColor;
-            out vec2 texCoord;
-            void main()
-            {
-                vertexColor = inColor;
-                texCoord = inTexCoord;
-                gl_Position = vec4(inPosition, 0.0, 1.0);
-            }
-        )";
-#endif
-        const char* fragmentShaderSource =
-#if defined(BKUI_PLATFORM_SWITCH)
-            "shaders/deko_triangle_fsh.dksh";
-#else
-            R"(
-            #version 330 core
-            in vec3 vertexColor;
-            in vec2 texCoord;
-            uniform sampler2D uTexture;
-            out vec4 outColor;
-            void main()
-            {
-                outColor = texture(uTexture, texCoord) * vec4(vertexColor, 1.0);
-            }
-        )";
-#endif
+        bk::RenderQueueRenderer renderer(*device);
+        if (!renderer.Initialize())
+        {
+            bk::Logger::instance().Error("Failed to initialize RenderQueueRenderer.");
+            return 1;
+        }
+        bk::Logger::instance().Info("bkui_demo: render queue renderer initialized");
 
-        bk::BufferHandle quadBuffer = device->CreateBuffer(bk::BufferDesc{
-            bk::BufferUsage::Vertex,
-            sizeof(Vertex) * quadVertices.size(),
-            quadVertices.data(),
-        });
-        bk::ShaderHandle vertexShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Vertex, vertexShaderSource});
-        bk::ShaderHandle fragmentShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Fragment, fragmentShaderSource});
-        const std::array<bk::VertexAttributeDesc, 3> attributes = {{
-            {0, bk::VertexFormat::Float2, offsetof(Vertex, position)},
-            {1, bk::VertexFormat::Float3, offsetof(Vertex, color)},
-            {2, bk::VertexFormat::Float2, offsetof(Vertex, uv)},
-        }};
-        bk::PipelineHandle pipeline = device->CreatePipeline(bk::PipelineDesc{
-            vertexShader,
-            fragmentShader,
-            bk::VertexLayoutDesc{sizeof(Vertex), attributes.data(), attributes.size()},
-            bk::PrimitiveTopology::Triangles,
-        });
         bk::CommandBufferHandle commandBuffer = device->CreateCommandBuffer();
 
-        Image frameImage = MakeImage(static_cast<int>(kDesignWidth), static_cast<int>(kDesignHeight), 0, 0, 0, 255);
-        bk::TextureHandle frameTexture = device->CreateTexture(bk::TextureDesc{
-            static_cast<std::uint32_t>(frameImage.width),
-            static_cast<std::uint32_t>(frameImage.height),
-            frameImage.pixels.data(),
-        });
-
-        if (!bk::IsValid(quadBuffer) || !bk::IsValid(vertexShader) || !bk::IsValid(fragmentShader) ||
-            !bk::IsValid(pipeline) || !bk::IsValid(commandBuffer) || !bk::IsValid(frameTexture))
+        if (!bk::IsValid(commandBuffer))
         {
             bk::Logger::instance().Error("Failed to create demo GPU resources.");
             return 1;
         }
+        bk::Logger::instance().Info("bkui_demo: command buffer created");
 
         using Clock = std::chrono::steady_clock;
         const float fixedDeltaSeconds = 1.0F / 60.0F;
@@ -921,8 +986,9 @@ int main(int argc, char** argv)
 
             platform->PollEvents();
             const bk::InputState input = platform->GetInput();
-            if (input.quitRequested || input.cancelPressed)
+            if (input.quitRequested)
             {
+                bk::Logger::instance().Info("bkui_demo: quit requested by platform");
                 app.RequestQuit();
             }
 
@@ -955,35 +1021,33 @@ int main(int argc, char** argv)
                 page->RequestLastFocus();
             }
 
-            frameImage = MakeImage(static_cast<int>(kDesignWidth), static_cast<int>(kDesignHeight), 0, 0, 0, 255);
-            RenderQueueToImage(frameImage, font, app.GetRenderQueue());
-            if (!device->UpdateTexture(frameTexture, bk::TextureDesc{
-                static_cast<std::uint32_t>(frameImage.width),
-                static_cast<std::uint32_t>(frameImage.height),
-                frameImage.pixels.data(),
-            }))
-            {
-                bk::Logger::instance().Error("Failed to upload frame texture.");
-                break;
-            }
-
             device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.03F, 0.04F, 0.08F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
-            device->BindPipeline(commandBuffer, pipeline);
-            device->BindVertexBuffer(commandBuffer, quadBuffer);
-            device->BindTexture(commandBuffer, frameTexture);
-            device->Draw(commandBuffer, static_cast<std::uint32_t>(quadVertices.size()));
+            if (!renderer.Render(commandBuffer, app.GetRenderQueue(), bk::Vector2{kDesignWidth, kDesignHeight}))
+            {
+                bk::Logger::instance().Error("Failed to record UI draw commands.");
+                break;
+            }
             device->EndCommandBuffer(commandBuffer);
             device->Submit(commandBuffer);
             device->EndFrame(swapchain);
         }
 
-        device->DestroyTexture(frameTexture);
+        if (app.QuitRequested())
+        {
+            bk::Logger::instance().Info("bkui_demo: loop ended because application requested quit");
+        }
+        else if (!platform->IsRunning())
+        {
+            bk::Logger::instance().Warn("bkui_demo: loop ended because platform is no longer running");
+        }
+        else
+        {
+            bk::Logger::instance().Warn("bkui_demo: loop ended unexpectedly");
+        }
+
         device->DestroyCommandBuffer(commandBuffer);
-        device->DestroyPipeline(pipeline);
-        device->DestroyShader(fragmentShader);
-        device->DestroyShader(vertexShader);
-        device->DestroyBuffer(quadBuffer);
+        renderer.Shutdown();
 
         app.Shutdown();
         device->Shutdown();

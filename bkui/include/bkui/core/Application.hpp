@@ -186,8 +186,59 @@ public:
     /// 获取帧结束事件。
     [[nodiscard]] FrameEvent& OnFrameEnd();
 
+    /// 设置聚焦框圆角半径，0 表示直角。
+    void SetFocusHighlightCornerRadius(float radius);
+
+    /// 获取聚焦框圆角半径。
+    [[nodiscard]] float GetFocusHighlightCornerRadius() const;
+
+    /// 设置是否启用聚焦框移动动画。
+    void SetFocusHighlightMotionEnabled(bool enabled);
+
+    /// 查询聚焦框移动动画是否启用。
+    [[nodiscard]] bool IsFocusHighlightMotionEnabled() const;
+
+    /// 设置聚焦框高亮主色 1。
+    void SetFocusHighlightColor1(const Color& color);
+
+    /// 获取聚焦框高亮主色 1。
+    [[nodiscard]] const Color& GetFocusHighlightColor1() const;
+
+    /// 设置聚焦框高亮主色 2。
+    void SetFocusHighlightColor2(const Color& color);
+
+    /// 获取聚焦框高亮主色 2。
+    [[nodiscard]] const Color& GetFocusHighlightColor2() const;
+
+    /// 设置是否保留非活动顶层 View 的聚焦框。
+    void SetPreserveInactiveFocusHighlights(bool enabled);
+
+    /// 查询是否保留非活动顶层 View 的聚焦框。
+    [[nodiscard]] bool IsPreservingInactiveFocusHighlights() const;
+
 private:
+    struct FocusHighlightState
+    {
+        std::weak_ptr<View> view{};
+        std::weak_ptr<View> root{};
+        Rect currentRect{};
+        Rect targetRect{};
+        float opacity = 0.0F;
+        float targetOpacity = 0.0F;
+        float pulseTime = 0.0F;
+        bool initialized = false;
+    };
+
     void ProcessInput();
+    void UpdateFocusHighlight(float deltaSeconds);
+    void UpdateFocusHighlightState(FocusHighlightState& state, const std::shared_ptr<View>& trackedView, float deltaSeconds, float targetOpacity);
+    void DrawFocusHighlight(RenderQueue& queue) const;
+    void DrawFocusHighlightsForRoot(RenderQueue& queue, const std::shared_ptr<View>& root) const;
+    void DrawFocusHighlightState(RenderQueue& queue, const FocusHighlightState& state) const;
+    void RemoveInactiveFocusHighlight(const std::shared_ptr<View>& root);
+    void CaptureInactiveFocusHighlight(const std::shared_ptr<View>& root, const std::shared_ptr<View>& view);
+    void InvalidateViewOrderCache();
+    [[nodiscard]] const std::vector<std::shared_ptr<View>>& OrderedViews(bool descending) const;
     [[nodiscard]] std::shared_ptr<View> FindTopmostViewAt(const Vector2& point) const;
     [[nodiscard]] std::shared_ptr<View> FindFirstFocusableView() const;
     [[nodiscard]] static bool IsDirectionalKey(const InputState::KeyEvent& key, NavigationDirection direction);
@@ -200,11 +251,21 @@ private:
     ApplicationDesc descriptor_{};
     std::vector<std::string> arguments_{};
     std::vector<std::shared_ptr<View>> views_{};
+    mutable bool viewOrderCacheDirty_ = true;
+    mutable std::vector<std::shared_ptr<View>> orderedViewsAscendingCache_{};
+    mutable std::vector<std::shared_ptr<View>> orderedViewsDescendingCache_{};
     RenderQueue renderQueue_{};
     MetaData metaData_{};
     InputState inputState_{};
     std::weak_ptr<View> focusedView_{};
     std::weak_ptr<View> pressedView_{};
+    FocusHighlightState focusHighlight_{};
+    std::vector<FocusHighlightState> inactiveFocusHighlights_{};
+    float focusHighlightCornerRadius_ = 14.0F;
+    bool focusHighlightMotionEnabled_ = true;
+    bool preserveInactiveFocusHighlights_ = false;
+    Color focusHighlightColor1_{0.34F, 0.76F, 1.0F, 1.0F};
+    Color focusHighlightColor2_{0.76F, 0.52F, 1.0F, 1.0F};
     std::uint64_t frameIndex_ = 0;
     bool initialized_ = false;
     bool running_ = false;

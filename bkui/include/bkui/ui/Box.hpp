@@ -44,8 +44,6 @@ protected:
 
     BoxDirection direction_;
     float spacing_ = 0.0F;
-    Color backgroundColor_{0.0F, 0.0F, 0.0F, 0.0F};
-    bool drawBackground_ = false;
 };
 
 class HBox final : public Box

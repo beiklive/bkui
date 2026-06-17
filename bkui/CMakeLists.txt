@@ -64,6 +64,7 @@ target_include_directories(
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/platform/stb"
 )
 
 target_compile_features(bkui PUBLIC cxx_std_20)

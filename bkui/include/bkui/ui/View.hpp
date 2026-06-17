@@ -29,6 +29,16 @@ struct EdgeInsets
     float bottom = 0.0F;
 };
 
+/// 阴影样式定义。
+struct ShadowStyle
+{
+    Vector2 offset{};
+    Color color{0.0F, 0.0F, 0.0F, 0.24F};
+    float blurRadius = 0.0F;
+    float spread = 0.0F;
+    bool enabled = false;
+};
+
 /// 焦点导航方向。
 enum class NavigationDirection
 {
@@ -77,6 +87,44 @@ public:
     [[nodiscard]] bool IsFocusable() const;
     /// 查询该视图当前是否处于焦点状态。
     [[nodiscard]] bool HasFocus() const;
+
+    /// 设置背景颜色。
+    void SetBackgroundColor(const Color& color);
+    /// 获取背景颜色。
+    [[nodiscard]] const Color& GetBackgroundColor() const;
+    /// 控制是否绘制背景。
+    void SetDrawBackground(bool enabled);
+    /// 查询当前是否绘制背景。
+    [[nodiscard]] bool IsBackgroundEnabled() const;
+    /// 设置圆角半径。
+    void SetCornerRadius(float radius);
+    /// 获取圆角半径。
+    [[nodiscard]] float GetCornerRadius() const;
+    /// 设置完整阴影样式。
+    void SetShadowStyle(const ShadowStyle& shadow);
+    /// 获取阴影样式。
+    [[nodiscard]] const ShadowStyle& GetShadowStyle() const;
+    /// 设置阴影是否启用。
+    void SetShadowEnabled(bool enabled);
+    /// 查询阴影是否启用。
+    [[nodiscard]] bool IsShadowEnabled() const;
+    /// 设置阴影偏移。
+    void SetShadowOffset(const Vector2& offset);
+    void SetShadowOffset(float x, float y);
+    /// 获取阴影偏移。
+    [[nodiscard]] const Vector2& GetShadowOffset() const;
+    /// 设置阴影颜色。
+    void SetShadowColor(const Color& color);
+    /// 获取阴影颜色。
+    [[nodiscard]] const Color& GetShadowColor() const;
+    /// 设置阴影模糊半径。
+    void SetShadowBlurRadius(float radius);
+    /// 获取阴影模糊半径。
+    [[nodiscard]] float GetShadowBlurRadius() const;
+    /// 设置阴影扩张半径。
+    void SetShadowSpread(float spread);
+    /// 获取阴影扩张半径。
+    [[nodiscard]] float GetShadowSpread() const;
 
     /// 设置视图外边距。
     void SetMargin(const EdgeInsets& margin);
@@ -291,6 +339,10 @@ protected:
 
     /// 绘制全部可见子视图。
     void DrawChildren(RenderQueue& queue) const;
+    /// 绘制基础阴影。
+    void DrawShadow(RenderQueue& queue) const;
+    /// 绘制基础背景。
+    void DrawBackground(RenderQueue& queue) const;
     /// 绘制调试线框。
     void DrawDebugWireframe(RenderQueue& queue) const;
     /// 将百分比写法统一归一化到 0.0-1.0。
@@ -298,7 +350,7 @@ protected:
     /// 将内容尺寸转换为带约束的边框尺寸。
     [[nodiscard]] Size ResolveConstrainedSize(const Size& available, const Size& contentSize) const;
     /// 返回按 zIndex 排序后的可见子视图。
-    [[nodiscard]] std::vector<std::shared_ptr<View>> VisibleChildrenByZOrder(bool descending = false) const;
+    [[nodiscard]] const std::vector<std::shared_ptr<View>>& VisibleChildrenByZOrder(bool descending = false) const;
 
     Rect frame_{};
     std::vector<std::shared_ptr<View>> children_;
@@ -310,6 +362,10 @@ protected:
     bool focusable_ = false;
     bool focused_ = false;
     int zIndex_ = 0;
+    Color backgroundColor_{0.0F, 0.0F, 0.0F, 0.0F};
+    bool drawBackground_ = false;
+    float cornerRadius_ = 0.0F;
+    ShadowStyle shadow_{};
     EdgeInsets margin_{};
     EdgeInsets padding_{};
     float width_ = kAutoValue;
@@ -326,6 +382,7 @@ protected:
 private:
     friend class Application;
 
+    void InvalidateVisibleChildrenCache();
     void SetFocusedState(bool focused);
     void RememberFocusedDescendant(const std::shared_ptr<View>& focusedView);
     [[nodiscard]] bool ContainsDescendant(const std::shared_ptr<View>& view) const;
@@ -333,6 +390,9 @@ private:
     std::array<std::weak_ptr<View>, 4> navigationTargets_{};
     std::weak_ptr<View> defaultFocusView_{};
     std::weak_ptr<View> lastFocusedView_{};
+    mutable bool visibleChildrenCacheDirty_ = true;
+    mutable std::vector<std::shared_ptr<View>> visibleChildrenAscendingCache_{};
+    mutable std::vector<std::shared_ptr<View>> visibleChildrenDescendingCache_{};
 };
 
 }

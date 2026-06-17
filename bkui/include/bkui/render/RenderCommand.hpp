@@ -11,6 +11,7 @@ namespace bk
 enum class RenderCommandType
 {
     Rect,
+    RoundedRect,
     Text,
     Line,
     PushClip,
@@ -36,6 +37,8 @@ struct RenderCommand
     float fontSize = 16.0F;
     Vector2 lineStart{};
     Vector2 lineEnd{};
+    float lineThickness = 1.5F;
+    float cornerRadius = 0.0F;
 };
 
 }

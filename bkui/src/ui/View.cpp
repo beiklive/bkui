@@ -11,6 +11,7 @@ namespace bk
 namespace
 {
 constexpr float kFrameEpsilon = 0.001F;
+constexpr float kShadowAlphaEpsilon = 0.001F;
 
 bool NearlyEqual(float lhs, float rhs)
 {
@@ -82,6 +83,10 @@ void View::SetVisible(bool visible)
     }
 
     visible_ = visible;
+    if (parent_ != nullptr)
+    {
+        parent_->InvalidateVisibleChildrenCache();
+    }
     InvalidateLayout();
 }
 
@@ -110,6 +115,7 @@ void View::SetZIndex(int zIndex)
     zIndex_ = zIndex;
     if (parent_ != nullptr)
     {
+        parent_->InvalidateVisibleChildrenCache();
         parent_->InvalidateLayout();
     }
 }
@@ -141,6 +147,103 @@ bool View::IsFocusable() const
 bool View::HasFocus() const
 {
     return focused_;
+}
+
+void View::SetBackgroundColor(const Color& color)
+{
+    backgroundColor_ = color;
+}
+
+const Color& View::GetBackgroundColor() const
+{
+    return backgroundColor_;
+}
+
+void View::SetDrawBackground(bool enabled)
+{
+    drawBackground_ = enabled;
+}
+
+bool View::IsBackgroundEnabled() const
+{
+    return drawBackground_;
+}
+
+void View::SetCornerRadius(float radius)
+{
+    cornerRadius_ = PositiveOrZero(radius);
+}
+
+float View::GetCornerRadius() const
+{
+    return cornerRadius_;
+}
+
+void View::SetShadowStyle(const ShadowStyle& shadow)
+{
+    shadow_ = shadow;
+    shadow_.blurRadius = PositiveOrZero(shadow_.blurRadius);
+    shadow_.spread = PositiveOrZero(shadow_.spread);
+}
+
+const ShadowStyle& View::GetShadowStyle() const
+{
+    return shadow_;
+}
+
+void View::SetShadowEnabled(bool enabled)
+{
+    shadow_.enabled = enabled;
+}
+
+bool View::IsShadowEnabled() const
+{
+    return shadow_.enabled;
+}
+
+void View::SetShadowOffset(const Vector2& offset)
+{
+    shadow_.offset = offset;
+}
+
+void View::SetShadowOffset(float x, float y)
+{
+    shadow_.offset = Vector2{x, y};
+}
+
+const Vector2& View::GetShadowOffset() const
+{
+    return shadow_.offset;
+}
+
+void View::SetShadowColor(const Color& color)
+{
+    shadow_.color = color;
+}
+
+const Color& View::GetShadowColor() const
+{
+    return shadow_.color;
+}
+
+void View::SetShadowBlurRadius(float radius)
+{
+    shadow_.blurRadius = PositiveOrZero(radius);
+}
+
+float View::GetShadowBlurRadius() const
+{
+    return shadow_.blurRadius;
+}
+
+void View::SetShadowSpread(float spread)
+{
+    shadow_.spread = PositiveOrZero(spread);
+}
+
+float View::GetShadowSpread() const
+{
+    return shadow_.spread;
 }
 
 void View::SetMargin(const EdgeInsets& margin)
@@ -588,6 +691,7 @@ void View::AddChild(std::shared_ptr<View> child)
     {
         child->parent_ = this;
         children_.push_back(std::move(child));
+        InvalidateVisibleChildrenCache();
         InvalidateLayout();
     }
 }
@@ -605,6 +709,7 @@ void View::RemoveChild(const std::shared_ptr<View>& child)
             }
         }
         children_.erase(it, children_.end());
+        InvalidateVisibleChildrenCache();
         InvalidateLayout();
     }
 }
@@ -621,6 +726,7 @@ void View::ClearChildren()
             }
         }
         children_.clear();
+        InvalidateVisibleChildrenCache();
         InvalidateLayout();
     }
 }
@@ -698,6 +804,8 @@ void View::Paint(RenderQueue& queue) const
         return;
     }
 
+    DrawShadow(queue);
+    DrawBackground(queue);
     Draw(queue);
     DrawChildren(queue);
     DrawDebugWireframe(queue);
@@ -865,6 +973,46 @@ void View::DrawChildren(RenderQueue& queue) const
     }
 }
 
+void View::DrawShadow(RenderQueue& queue) const
+{
+    if (!shadow_.enabled || frame_.width <= 0.0F || frame_.height <= 0.0F || shadow_.color.a <= kShadowAlphaEpsilon)
+    {
+        return;
+    }
+
+    const float blurRadius = PositiveOrZero(shadow_.blurRadius);
+    const float spread = PositiveOrZero(shadow_.spread);
+    const int layers = std::max(1, static_cast<int>(std::ceil(std::max(1.0F, blurRadius) / 4.0F)));
+    const float radius = std::max(0.0F, cornerRadius_);
+
+    for (int layer = layers - 1; layer >= 0; --layer)
+    {
+        const float t = static_cast<float>(layer + 1) / static_cast<float>(layers);
+        const float expansion = spread + blurRadius * t;
+        const float alphaScale = (1.0F - (static_cast<float>(layer) / static_cast<float>(layers))) / static_cast<float>(layers);
+        Color color = shadow_.color;
+        color.a *= alphaScale * 1.35F;
+
+        const Rect shadowRect{
+            frame_.x + shadow_.offset.x - expansion,
+            frame_.y + shadow_.offset.y - expansion,
+            frame_.width + expansion * 2.0F,
+            frame_.height + expansion * 2.0F,
+        };
+        queue.PushRoundedRect(shadowRect, color, radius + expansion);
+    }
+}
+
+void View::DrawBackground(RenderQueue& queue) const
+{
+    if (!drawBackground_ || frame_.width <= 0.0F || frame_.height <= 0.0F || backgroundColor_.a <= kShadowAlphaEpsilon)
+    {
+        return;
+    }
+
+    queue.PushRoundedRect(frame_, backgroundColor_, cornerRadius_);
+}
+
 void View::DrawDebugWireframe(RenderQueue& queue) const
 {
     if (!debugWireframeEnabled_)
@@ -940,25 +1088,38 @@ Size View::ResolveConstrainedSize(const Size& available, const Size& contentSize
     return Size{resolvedWidth, resolvedHeight};
 }
 
-std::vector<std::shared_ptr<View>> View::VisibleChildrenByZOrder(bool descending) const
+const std::vector<std::shared_ptr<View>>& View::VisibleChildrenByZOrder(bool descending) const
 {
-    std::vector<std::shared_ptr<View>> ordered;
-    ordered.reserve(children_.size());
-    for (const auto& child : children_)
+    if (visibleChildrenCacheDirty_)
     {
-        if (child && child->IsVisible())
+        visibleChildrenAscendingCache_.clear();
+        visibleChildrenAscendingCache_.reserve(children_.size());
+        for (const auto& child : children_)
         {
-            ordered.push_back(child);
+            if (child && child->IsVisible())
+            {
+                visibleChildrenAscendingCache_.push_back(child);
+            }
         }
+
+        std::stable_sort(
+            visibleChildrenAscendingCache_.begin(),
+            visibleChildrenAscendingCache_.end(),
+            [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
+                return lhs->GetZIndex() < rhs->GetZIndex();
+            });
+
+        visibleChildrenDescendingCache_ = visibleChildrenAscendingCache_;
+        std::reverse(visibleChildrenDescendingCache_.begin(), visibleChildrenDescendingCache_.end());
+        visibleChildrenCacheDirty_ = false;
     }
 
-    std::stable_sort(
-        ordered.begin(),
-        ordered.end(),
-        [descending](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
-            return descending ? lhs->GetZIndex() > rhs->GetZIndex() : lhs->GetZIndex() < rhs->GetZIndex();
-        });
-    return ordered;
+    return descending ? visibleChildrenDescendingCache_ : visibleChildrenAscendingCache_;
+}
+
+void View::InvalidateVisibleChildrenCache()
+{
+    visibleChildrenCacheDirty_ = true;
 }
 
 void View::SetFocusedState(bool focused)

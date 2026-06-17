@@ -76,6 +76,8 @@ if(BKUI_PLATFORM_SWITCH)
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${BKUI_SWITCH_SHADER_DIR}"
         COMMAND "${NX_UAM_EXE}" -s vert -o "${BKUI_SWITCH_SHADER_DIR}/deko_triangle_vsh.dksh" "${CMAKE_SOURCE_DIR}/resources/shaders/deko3d/triangle_vsh.glsl"
         COMMAND "${NX_UAM_EXE}" -s frag -o "${BKUI_SWITCH_SHADER_DIR}/deko_triangle_fsh.dksh" "${CMAKE_SOURCE_DIR}/resources/shaders/deko3d/triangle_fsh.glsl"
+        COMMAND "${NX_UAM_EXE}" -s vert -o "${BKUI_SWITCH_SHADER_DIR}/deko_ui_vsh.dksh" "${CMAKE_SOURCE_DIR}/resources/shaders/deko3d/ui_vsh.glsl"
+        COMMAND "${NX_UAM_EXE}" -s frag -o "${BKUI_SWITCH_SHADER_DIR}/deko_ui_fsh.dksh" "${CMAKE_SOURCE_DIR}/resources/shaders/deko3d/ui_fsh.glsl"
         COMMAND "$<$<BOOL:${NX_NACPTOOL_EXE}>:${NX_NACPTOOL_EXE}>" "$<$<BOOL:${NX_NACPTOOL_EXE}>:--create>" "$<$<BOOL:${NX_NACPTOOL_EXE}>:BeikUI Resource Demo>" "$<$<BOOL:${NX_NACPTOOL_EXE}>:beiklive>" "$<$<BOOL:${NX_NACPTOOL_EXE}>:1.0.0>" "$<$<BOOL:${NX_NACPTOOL_EXE}>:${BKUI_SWITCH_NACP}>"
         COMMAND "${NX_ELF2NRO_EXE}" "$<TARGET_FILE:bkui_demo>" "${BKUI_SWITCH_NRO}" "$<$<BOOL:${NX_NACPTOOL_EXE}>:--nacp=${BKUI_SWITCH_NACP}>" "--romfsdir=${BKUI_SWITCH_ROMFS_DIR}"
         BYPRODUCTS "${BKUI_SWITCH_NRO}" "${BKUI_SWITCH_NACP}"

@@ -14,6 +14,7 @@
 #include <bkui/render/Device.hpp>
 #include <bkui/render/RenderCommand.hpp>
 #include <bkui/render/RenderQueue.hpp>
+#include <bkui/render/RenderQueueRenderer.hpp>
 #include <bkui/ui/Box.hpp>
 #include <bkui/ui/Button.hpp>
 #include <bkui/ui/Label.hpp>

@@ -209,8 +209,20 @@ void FillRect(Image& image, int x, int y, int width, int height, std::uint8_t r,
     }
 }
 
-void DrawLine(Image& image, int x0, int y0, int x1, int y1, std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a, const IntRect* clipRect = nullptr)
+void DrawLine(
+    Image& image,
+    int x0,
+    int y0,
+    int x1,
+    int y1,
+    std::uint8_t r,
+    std::uint8_t g,
+    std::uint8_t b,
+    std::uint8_t a,
+    float thickness = 1.0F,
+    const IntRect* clipRect = nullptr)
 {
+    const int radius = std::max(0, static_cast<int>(std::round(std::max(1.0F, thickness) * 0.5F)) - 1);
     const int dx = std::abs(x1 - x0);
     const int dy = std::abs(y1 - y0);
     const int sx = x0 < x1 ? 1 : -1;
@@ -219,15 +231,25 @@ void DrawLine(Image& image, int x0, int y0, int x1, int y1, std::uint8_t r, std:
 
     for (;;)
     {
-        if (PointInClip(clipRect, x0, y0))
+        for (int offsetY = -radius; offsetY <= radius; ++offsetY)
         {
-            if (a >= 255)
+            for (int offsetX = -radius; offsetX <= radius; ++offsetX)
             {
-                PutPixel(image, x0, y0, r, g, b, a);
-            }
-            else
-            {
-                BlendPixel(image, x0, y0, r, g, b, a);
+                const int pixelX = x0 + offsetX;
+                const int pixelY = y0 + offsetY;
+                if (!PointInClip(clipRect, pixelX, pixelY))
+                {
+                    continue;
+                }
+
+                if (a >= 255)
+                {
+                    PutPixel(image, pixelX, pixelY, r, g, b, a);
+                }
+                else
+                {
+                    BlendPixel(image, pixelX, pixelY, r, g, b, a);
+                }
             }
         }
 
@@ -588,6 +610,7 @@ void RenderQueueToImage(Image& image, const FontResource& font, const bk::Render
                 g,
                 b,
                 a,
+                command.lineThickness,
                 &currentClip);
         }
     }
@@ -670,6 +693,7 @@ void RenderQueueToImage(Image& image, const FontResource& font, const bk::Render
                 g,
                 b,
                 a,
+                command.lineThickness,
                 &currentClip);
         }
     }

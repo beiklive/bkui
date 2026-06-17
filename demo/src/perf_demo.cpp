@@ -719,73 +719,16 @@ int main(int argc, char** argv)
         page->SetStats(stats);
         page->SetMode(mode);
 
-        const std::array<Vertex, 6> quadVertices = MakeFullscreenQuad();
-        const char* vertexShaderSource =
-#if defined(BKUI_PLATFORM_SWITCH)
-            "shaders/deko_triangle_vsh.dksh";
-#else
-            R"(
-            #version 330 core
-            layout(location = 0) in vec2 inPosition;
-            layout(location = 1) in vec3 inColor;
-            layout(location = 2) in vec2 inTexCoord;
-            out vec3 vertexColor;
-            out vec2 texCoord;
-            void main()
-            {
-                vertexColor = inColor;
-                texCoord = inTexCoord;
-                gl_Position = vec4(inPosition, 0.0, 1.0);
-            }
-        )";
-#endif
-        const char* fragmentShaderSource =
-#if defined(BKUI_PLATFORM_SWITCH)
-            "shaders/deko_triangle_fsh.dksh";
-#else
-            R"(
-            #version 330 core
-            in vec3 vertexColor;
-            in vec2 texCoord;
-            uniform sampler2D uTexture;
-            out vec4 outColor;
-            void main()
-            {
-                outColor = texture(uTexture, texCoord) * vec4(vertexColor, 1.0);
-            }
-        )";
-#endif
+        bk::RenderQueueRenderer renderer(*device);
+        if (!renderer.Initialize())
+        {
+            bk::Logger::instance().Error("Failed to initialize RenderQueueRenderer.");
+            return 1;
+        }
 
-        bk::BufferHandle quadBuffer = device->CreateBuffer(bk::BufferDesc{
-            bk::BufferUsage::Vertex,
-            sizeof(Vertex) * quadVertices.size(),
-            quadVertices.data(),
-        });
-        bk::ShaderHandle vertexShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Vertex, vertexShaderSource});
-        bk::ShaderHandle fragmentShader = device->CreateShader(bk::ShaderDesc{bk::ShaderStage::Fragment, fragmentShaderSource});
-        const std::array<bk::VertexAttributeDesc, 3> attributes = {{
-            {0, bk::VertexFormat::Float2, offsetof(Vertex, position)},
-            {1, bk::VertexFormat::Float3, offsetof(Vertex, color)},
-            {2, bk::VertexFormat::Float2, offsetof(Vertex, uv)},
-        }};
-        bk::PipelineHandle pipeline = device->CreatePipeline(bk::PipelineDesc{
-            vertexShader,
-            fragmentShader,
-            bk::VertexLayoutDesc{sizeof(Vertex), attributes.data(), attributes.size()},
-            bk::PrimitiveTopology::Triangles,
-        });
         bk::CommandBufferHandle commandBuffer = device->CreateCommandBuffer();
 
-        const FontResource& font = GlobalFont();
-        Image frameImage = MakeImage(static_cast<int>(windowSize.x), static_cast<int>(windowSize.y), 11, 16, 24, 255);
-        bk::TextureHandle frameTexture = device->CreateTexture(bk::TextureDesc{
-            static_cast<std::uint32_t>(frameImage.width),
-            static_cast<std::uint32_t>(frameImage.height),
-            frameImage.pixels.data(),
-        });
-
-        if (!bk::IsValid(quadBuffer) || !bk::IsValid(vertexShader) || !bk::IsValid(fragmentShader) ||
-            !bk::IsValid(pipeline) || !bk::IsValid(commandBuffer) || !bk::IsValid(frameTexture))
+        if (!bk::IsValid(commandBuffer))
         {
             bk::Logger::instance().Error("Failed to create GPU resources.");
             return 1;
@@ -823,14 +766,7 @@ int main(int argc, char** argv)
             {
                 windowSize = latestWindowSize;
                 page->SetFrame(bk::Rect{0.0F, 0.0F, windowSize.x, windowSize.y});
-                frameImage = MakeImage(static_cast<int>(windowSize.x), static_cast<int>(windowSize.y), 11, 16, 24, 255);
                 device->Resize(windowSize);
-                device->DestroyTexture(frameTexture);
-                frameTexture = device->CreateTexture(bk::TextureDesc{
-                    static_cast<std::uint32_t>(frameImage.width),
-                    static_cast<std::uint32_t>(frameImage.height),
-                    frameImage.pixels.data(),
-                });
                 nextFrameTime = Clock::now();
             }
             else if (input.windowResized)
@@ -889,26 +825,14 @@ int main(int argc, char** argv)
                 break;
             }
 
-            ClearImage(frameImage, 11, 16, 24, 255);
-            RenderQueueToImage(frameImage, font, app.GetRenderQueue());
-
-            if (!device->UpdateTexture(frameTexture, bk::TextureDesc{
-                static_cast<std::uint32_t>(frameImage.width),
-                static_cast<std::uint32_t>(frameImage.height),
-                frameImage.pixels.data(),
-            }))
-            {
-                bk::Logger::instance().Error("Failed to update frame texture.");
-                break;
-            }
-
             const auto presentStart = Clock::now();
             device->BeginFrame(swapchain, bk::RenderPassDesc{bk::Color{0.03F, 0.04F, 0.06F, 1.0F}});
             device->BeginCommandBuffer(commandBuffer);
-            device->BindPipeline(commandBuffer, pipeline);
-            device->BindVertexBuffer(commandBuffer, quadBuffer);
-            device->BindTexture(commandBuffer, frameTexture);
-            device->Draw(commandBuffer, static_cast<std::uint32_t>(quadVertices.size()));
+            if (!renderer.Render(commandBuffer, app.GetRenderQueue(), windowSize))
+            {
+                bk::Logger::instance().Error("Failed to record UI draw commands.");
+                break;
+            }
             device->EndCommandBuffer(commandBuffer);
             device->Submit(commandBuffer);
             device->EndFrame(swapchain);
@@ -946,12 +870,8 @@ int main(int argc, char** argv)
             }
         }
 
-        device->DestroyTexture(frameTexture);
         device->DestroyCommandBuffer(commandBuffer);
-        device->DestroyPipeline(pipeline);
-        device->DestroyShader(fragmentShader);
-        device->DestroyShader(vertexShader);
-        device->DestroyBuffer(quadBuffer);
+        renderer.Shutdown();
 
         app.Shutdown();
         device->Shutdown();

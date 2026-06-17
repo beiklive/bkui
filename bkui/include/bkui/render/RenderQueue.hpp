@@ -15,10 +15,12 @@ public:
     void Clear();
     /// 压入一个矩形填充命令。
     void PushRect(const Rect& bounds, const Color& color);
+    /// 压入一个圆角矩形填充命令。
+    void PushRoundedRect(const Rect& bounds, const Color& color, float cornerRadius);
     /// 压入一条文本绘制命令。
     void PushText(const Rect& bounds, std::string text, float fontSize, const Color& color);
     /// 压入一条线段命令。
-    void PushLine(const Vector2& start, const Vector2& end, const Color& color);
+    void PushLine(const Vector2& start, const Vector2& end, const Color& color, float thickness = 1.5F);
     /// 开始一个新的裁剪区域。
     void PushClipRect(const Rect& bounds);
     /// 结束当前裁剪区域。

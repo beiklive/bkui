@@ -25,18 +25,20 @@ Logger::~Logger()
 
 bool Logger::Initialize(const LoggerDesc& desc)
 {
+    LoggerDesc resolvedDesc = desc;
+
     if (!desc.filePath.empty())
     {
         if (!OpenFile(desc.filePath, desc.truncateFile))
         {
-            std::scoped_lock lock(mutex_);
-            initialized_ = false;
-            return false;
+            resolvedDesc.filePath.clear();
+            resolvedDesc.enableConsole = true;
+            std::fprintf(stderr, "Logger warning: failed to open log file '%s', falling back to console only.\n", desc.filePath.c_str());
         }
     }
 
     std::scoped_lock lock(mutex_);
-    desc_ = desc;
+    desc_ = std::move(resolvedDesc);
     initialized_ = true;
 
     if (desc_.filePath.empty())

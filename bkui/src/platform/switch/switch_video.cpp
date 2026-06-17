@@ -1,5 +1,8 @@
 #include "switch_platform_internal.hpp"
 
+#include <cinttypes>
+#include <cstdio>
+
 #define HANDHELD_WIDTH 1280.0f
 #define HANDHELD_HEIGHT 720.0f
 
@@ -12,7 +15,15 @@ namespace bk::sw
 
 bool InitVideo()
 {
-    return R_SUCCEEDED(romfsInit());
+    const Result rc = romfsInit();
+    if (R_FAILED(rc))
+    {
+        std::fprintf(stderr, "switch video: romfsInit failed: 0x%08" PRIx32 "\n", static_cast<std::uint32_t>(rc));
+        return false;
+    }
+
+    std::fprintf(stdout, "switch video: romfsInit ok\n");
+    return true;
 }
 
 void ShutdownVideo()

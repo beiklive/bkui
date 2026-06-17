@@ -69,17 +69,6 @@ Size Button::Measure(const Size& available) const
 void Button::Draw(RenderQueue& queue) const
 {
     Box::Draw(queue);
-    if (HasFocus())
-    {
-        queue.PushRect(
-            Rect{
-                frame_.x + 2.0F,
-                frame_.y + 2.0F,
-                std::max(0.0F, frame_.width - 4.0F),
-                4.0F,
-            },
-            Color{1.0F, 1.0F, 1.0F, 0.72F});
-    }
     queue.PushText(GetContentFrame(), text_, fontSize_, textColor_);
 }
 

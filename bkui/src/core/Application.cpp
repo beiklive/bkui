@@ -16,6 +16,16 @@ Application* Application::activeApplication_ = nullptr;
 namespace
 {
 constexpr float kNavigationEpsilon = 0.001F;
+constexpr float kFocusHighlightInset = 6.0F;
+constexpr float kFocusHighlightThickness = 3.0F;
+constexpr float kFocusHighlightGlowThickness = 5.0F;
+constexpr float kFocusHighlightLerpSpeed = 14.0F;
+constexpr float kFocusHighlightOpacitySpeed = 10.0F;
+constexpr float kFocusHighlightSegmentLength = 8.0F;
+constexpr float kFocusHighlightTravelSpeed = 0.95F;
+constexpr float kFocusHighlightPulseSpeed = 5.7F;
+constexpr float kFocusHighlightGlowSpanPixels = 150.0F;
+constexpr float kFocusHighlightShadowLayers = 3.0F;
 
 std::vector<std::shared_ptr<View>> VisibleChildrenSorted(const std::shared_ptr<View>& root)
 {
@@ -46,6 +56,85 @@ std::vector<std::shared_ptr<View>> VisibleChildrenSorted(const std::shared_ptr<V
 bool NearlyEqual(float lhs, float rhs)
 {
     return std::abs(lhs - rhs) <= kNavigationEpsilon;
+}
+
+float Approach(float current, float target, float deltaSeconds, float speed)
+{
+    if (deltaSeconds <= 0.0F)
+    {
+        return target;
+    }
+
+    const float factor = 1.0F - std::exp(-speed * deltaSeconds);
+    return current + (target - current) * factor;
+}
+
+Color HsvToRgb(float hue, float saturation, float value, float alpha)
+{
+    const float wrappedHue = hue - std::floor(hue);
+    const float scaledHue = wrappedHue * 6.0F;
+    const float chroma = value * saturation;
+    const float x = chroma * (1.0F - std::fabs(std::fmod(scaledHue, 2.0F) - 1.0F));
+    const float match = value - chroma;
+
+    float red = 0.0F;
+    float green = 0.0F;
+    float blue = 0.0F;
+
+    if (scaledHue < 1.0F)
+    {
+        red = chroma;
+        green = x;
+    }
+    else if (scaledHue < 2.0F)
+    {
+        red = x;
+        green = chroma;
+    }
+    else if (scaledHue < 3.0F)
+    {
+        green = chroma;
+        blue = x;
+    }
+    else if (scaledHue < 4.0F)
+    {
+        green = x;
+        blue = chroma;
+    }
+    else if (scaledHue < 5.0F)
+    {
+        red = x;
+        blue = chroma;
+    }
+    else
+    {
+        red = chroma;
+        blue = x;
+    }
+
+    return Color{
+        red + match,
+        green + match,
+        blue + match,
+        alpha,
+    };
+}
+
+Color LerpColor(const Color& from, const Color& to, float t)
+{
+    const float clamped = std::clamp(t, 0.0F, 1.0F);
+    return Color{
+        from.r + (to.r - from.r) * clamped,
+        from.g + (to.g - from.g) * clamped,
+        from.b + (to.b - from.b) * clamped,
+        from.a + (to.a - from.a) * clamped,
+    };
+}
+
+float WrapDistance(float a, float b, float length)
+{
+    const float direct = std::fabs(a - b);
+    return std::min(direct, std::max(0.0F, length - direct));
 }
 
 Vector2 RectCenter(const Rect& rect)
@@ -356,21 +445,37 @@ void Application::AddView(std::shared_ptr<View> view)
     if (view)
     {
         views_.push_back(std::move(view));
+        InvalidateViewOrderCache();
     }
 }
 
 void Application::RemoveView(const std::shared_ptr<View>& view)
 {
+    if (view)
+    {
+        RemoveInactiveFocusHighlight(view);
+        if (std::shared_ptr<View> focused = focusedView_.lock())
+        {
+            if (focused == view || IsInSubtree(view, focused))
+            {
+                ClearFocus();
+            }
+        }
+    }
+
     const auto it = std::remove(views_.begin(), views_.end(), view);
     if (it != views_.end())
     {
         views_.erase(it, views_.end());
+        InvalidateViewOrderCache();
     }
 }
 
 void Application::ClearViews()
 {
     views_.clear();
+    inactiveFocusHighlights_.clear();
+    InvalidateViewOrderCache();
 }
 
 const std::vector<std::shared_ptr<View>>& Application::GetViews() const
@@ -416,16 +521,33 @@ bool Application::SetFocusedView(const std::shared_ptr<View>& view)
         return current != nullptr;
     }
 
+    const std::shared_ptr<View> currentRoot = TopLevelAncestor(current);
+    const std::shared_ptr<View> nextRoot = TopLevelAncestor(view);
+
     if (current)
     {
+        if (preserveInactiveFocusHighlights_ && view && currentRoot && currentRoot != nextRoot)
+        {
+            CaptureInactiveFocusHighlight(currentRoot, current);
+        }
+        else if (currentRoot)
+        {
+            RemoveInactiveFocusHighlight(currentRoot);
+        }
         current->SetFocusedState(false);
     }
 
     focusedView_.reset();
     if (view)
     {
+        if (nextRoot)
+        {
+            RemoveInactiveFocusHighlight(nextRoot);
+        }
         view->SetFocusedState(true);
         focusedView_ = view;
+        focusHighlight_.view = view;
+        focusHighlight_.root = nextRoot;
 
         std::shared_ptr<View> cursor = view;
         while (cursor)
@@ -514,20 +636,9 @@ bool Application::RunFrame(float deltaSeconds, bool clearRenderQueue)
 
     onFrameBegin_.Emit(*this, deltaSeconds, frameIndex_);
     ProcessInput();
+    UpdateFocusHighlight(deltaSeconds);
 
-    std::vector<std::shared_ptr<View>> orderedViews = views_;
-    std::stable_sort(
-        orderedViews.begin(),
-        orderedViews.end(),
-        [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
-            if (!lhs || !rhs)
-            {
-                return static_cast<bool>(lhs);
-            }
-            return lhs->GetZIndex() < rhs->GetZIndex();
-        });
-
-    for (const auto& view : orderedViews)
+    for (const auto& view : OrderedViews(false))
     {
         if (!view || !view->IsVisible())
         {
@@ -536,6 +647,7 @@ bool Application::RunFrame(float deltaSeconds, bool clearRenderQueue)
 
         view->Frame(deltaSeconds);
         view->Paint(renderQueue_);
+        DrawFocusHighlightsForRoot(renderQueue_, view);
     }
 
     metaData_.Set("application.frame_index", frameIndex_);
@@ -670,6 +782,60 @@ std::string_view Application::GetExecutablePath() const
     return arguments_.empty() ? std::string_view{} : std::string_view(arguments_.front());
 }
 
+void Application::SetFocusHighlightCornerRadius(float radius)
+{
+    focusHighlightCornerRadius_ = std::max(0.0F, radius);
+}
+
+float Application::GetFocusHighlightCornerRadius() const
+{
+    return focusHighlightCornerRadius_;
+}
+
+void Application::SetFocusHighlightMotionEnabled(bool enabled)
+{
+    focusHighlightMotionEnabled_ = enabled;
+}
+
+bool Application::IsFocusHighlightMotionEnabled() const
+{
+    return focusHighlightMotionEnabled_;
+}
+
+void Application::SetPreserveInactiveFocusHighlights(bool enabled)
+{
+    preserveInactiveFocusHighlights_ = enabled;
+    if (!preserveInactiveFocusHighlights_)
+    {
+        inactiveFocusHighlights_.clear();
+    }
+}
+
+bool Application::IsPreservingInactiveFocusHighlights() const
+{
+    return preserveInactiveFocusHighlights_;
+}
+
+void Application::SetFocusHighlightColor1(const Color& color)
+{
+    focusHighlightColor1_ = color;
+}
+
+const Color& Application::GetFocusHighlightColor1() const
+{
+    return focusHighlightColor1_;
+}
+
+void Application::SetFocusHighlightColor2(const Color& color)
+{
+    focusHighlightColor2_ = color;
+}
+
+const Color& Application::GetFocusHighlightColor2() const
+{
+    return focusHighlightColor2_;
+}
+
 Application::LifecycleEvent& Application::OnInitialize()
 {
     return onInitialize_;
@@ -795,21 +961,386 @@ void Application::ProcessInput()
     }
 }
 
+void Application::UpdateFocusHighlightState(
+    FocusHighlightState& state,
+    const std::shared_ptr<View>& trackedView,
+    float deltaSeconds,
+    float targetOpacity)
+{
+    state.pulseTime += std::max(0.0F, deltaSeconds);
+
+    if (trackedView && trackedView->IsVisible())
+    {
+        const Rect frame = trackedView->GetFrame();
+        state.targetRect = Rect{
+            frame.x - kFocusHighlightInset,
+            frame.y - kFocusHighlightInset,
+            frame.width + kFocusHighlightInset * 2.0F,
+            frame.height + kFocusHighlightInset * 2.0F,
+        };
+        state.targetOpacity = targetOpacity;
+
+        if (!state.initialized)
+        {
+            state.currentRect = state.targetRect;
+            state.opacity = state.targetOpacity;
+            state.initialized = true;
+            return;
+        }
+    }
+    else
+    {
+        state.targetOpacity = 0.0F;
+    }
+
+    if (!focusHighlightMotionEnabled_)
+    {
+        state.currentRect = state.targetRect;
+        state.opacity = Approach(
+            state.opacity,
+            state.targetOpacity,
+            deltaSeconds,
+            kFocusHighlightOpacitySpeed);
+        return;
+    }
+
+    state.currentRect.x = Approach(
+        state.currentRect.x,
+        state.targetRect.x,
+        deltaSeconds,
+        kFocusHighlightLerpSpeed);
+    state.currentRect.y = Approach(
+        state.currentRect.y,
+        state.targetRect.y,
+        deltaSeconds,
+        kFocusHighlightLerpSpeed);
+    state.currentRect.width = Approach(
+        state.currentRect.width,
+        state.targetRect.width,
+        deltaSeconds,
+        kFocusHighlightLerpSpeed);
+    state.currentRect.height = Approach(
+        state.currentRect.height,
+        state.targetRect.height,
+        deltaSeconds,
+        kFocusHighlightLerpSpeed);
+    state.opacity = Approach(
+        state.opacity,
+        state.targetOpacity,
+        deltaSeconds,
+        kFocusHighlightOpacitySpeed);
+}
+
+void Application::UpdateFocusHighlight(float deltaSeconds)
+{
+    UpdateFocusHighlightState(focusHighlight_, focusedView_.lock(), deltaSeconds, 1.0F);
+
+    if (!preserveInactiveFocusHighlights_)
+    {
+        inactiveFocusHighlights_.clear();
+        return;
+    }
+
+    const std::shared_ptr<View> activeRoot = TopLevelAncestor(focusedView_.lock());
+    for (std::size_t index = 0; index < inactiveFocusHighlights_.size();)
+    {
+        FocusHighlightState& state = inactiveFocusHighlights_[index];
+        const std::shared_ptr<View> root = state.root.lock();
+        const std::shared_ptr<View> trackedView = state.view.lock();
+        if (!root || !trackedView || !root->IsVisible() || !trackedView->IsVisible() ||
+            (activeRoot && root == activeRoot) || !IsInSubtree(root, trackedView))
+        {
+            inactiveFocusHighlights_.erase(inactiveFocusHighlights_.begin() + static_cast<std::ptrdiff_t>(index));
+            continue;
+        }
+
+        UpdateFocusHighlightState(state, trackedView, deltaSeconds, 1.0F);
+        ++index;
+    }
+}
+
+void Application::DrawFocusHighlightState(RenderQueue& queue, const FocusHighlightState& state) const
+{
+    if (!state.initialized || state.opacity <= 0.01F)
+    {
+        return;
+    }
+
+    const Rect& rect = state.currentRect;
+    if (rect.width <= 0.0F || rect.height <= 0.0F)
+    {
+        return;
+    }
+
+    const float pulse = 0.5F + 0.5F * std::sin(state.pulseTime * 5.5F);
+    const float glowAlpha = state.opacity * (0.14F + pulse * 0.10F);
+    const float borderAlpha = state.opacity * (0.82F + pulse * 0.10F);
+
+    const float cornerRadius = std::max(
+        0.0F,
+        std::min({
+            focusHighlightCornerRadius_,
+            rect.width * 0.5F,
+            rect.height * 0.5F,
+        }));
+
+    const auto buildRoundedRectPath = [&](const Rect& bounds, float radius) {
+        std::vector<Vector2> points;
+        if (bounds.width <= 0.0F || bounds.height <= 0.0F)
+        {
+            return points;
+        }
+
+        const float clampedRadius = std::max(0.0F, std::min({radius, bounds.width * 0.5F, bounds.height * 0.5F}));
+        if (clampedRadius <= 0.0F)
+        {
+            points.push_back(Vector2{bounds.x, bounds.y});
+            points.push_back(Vector2{bounds.x + bounds.width, bounds.y});
+            points.push_back(Vector2{bounds.x + bounds.width, bounds.y + bounds.height});
+            points.push_back(Vector2{bounds.x, bounds.y + bounds.height});
+            return points;
+        }
+
+        const float arcLength = 0.5F * 3.1415926535F * clampedRadius;
+        const int arcSteps = std::max(4, static_cast<int>(std::ceil(arcLength / kFocusHighlightSegmentLength)));
+        points.push_back(Vector2{bounds.x + clampedRadius, bounds.y});
+        points.push_back(Vector2{bounds.x + bounds.width - clampedRadius, bounds.y});
+
+        const auto appendArc = [&](float centerX, float centerY, float startAngle, float endAngle) {
+            for (int step = 1; step <= arcSteps; ++step)
+            {
+                const float t = static_cast<float>(step) / static_cast<float>(arcSteps);
+                const float angle = startAngle + (endAngle - startAngle) * t;
+                points.push_back(Vector2{
+                    centerX + std::cos(angle) * clampedRadius,
+                    centerY + std::sin(angle) * clampedRadius,
+                });
+            }
+        };
+
+        appendArc(
+            bounds.x + bounds.width - clampedRadius,
+            bounds.y + clampedRadius,
+            -0.5F * 3.1415926535F,
+            0.0F);
+        points.push_back(Vector2{bounds.x + bounds.width, bounds.y + bounds.height - clampedRadius});
+        appendArc(
+            bounds.x + bounds.width - clampedRadius,
+            bounds.y + bounds.height - clampedRadius,
+            0.0F,
+            0.5F * 3.1415926535F);
+        points.push_back(Vector2{bounds.x + clampedRadius, bounds.y + bounds.height});
+        appendArc(
+            bounds.x + clampedRadius,
+            bounds.y + bounds.height - clampedRadius,
+            0.5F * 3.1415926535F,
+            3.1415926535F);
+        points.push_back(Vector2{bounds.x, bounds.y + clampedRadius});
+        appendArc(
+            bounds.x + clampedRadius,
+            bounds.y + clampedRadius,
+            3.1415926535F,
+            1.5F * 3.1415926535F);
+        return points;
+    };
+
+    const auto computePathLength = [&](const std::vector<Vector2>& path) {
+        float total = 0.0F;
+        if (path.size() < 2)
+        {
+            return total;
+        }
+
+        for (std::size_t index = 0; index < path.size(); ++index)
+        {
+            const std::size_t nextIndex = (index + 1) % path.size();
+            const float dx = path[nextIndex].x - path[index].x;
+            const float dy = path[nextIndex].y - path[index].y;
+            total += std::sqrt(dx * dx + dy * dy);
+        }
+        return total;
+    };
+
+    const auto drawShadowPath = [&](const std::vector<Vector2>& path, float thickness, float alphaScale) {
+        if (path.size() < 2 || thickness <= 0.0F)
+        {
+            return;
+        }
+
+        const Color shadowColor{0.0F, 0.0F, 0.0F, alphaScale};
+        for (std::size_t index = 0; index < path.size(); ++index)
+        {
+            const std::size_t nextIndex = (index + 1) % path.size();
+            queue.PushLine(path[index], path[nextIndex], shadowColor, thickness);
+        }
+    };
+
+    const auto drawAnimatedPath = [&](const std::vector<Vector2>& path, float thickness, float alphaScale) {
+        if (path.size() < 2 || thickness <= 0.0F)
+        {
+            return;
+        }
+
+        const float totalLength = std::max(1.0F, computePathLength(path));
+        const float gradientX = (std::cos(state.pulseTime / kFocusHighlightTravelSpeed / 3.0F) + 1.0F) * 0.5F;
+        const float gradientY = (std::sin(state.pulseTime / kFocusHighlightTravelSpeed / 3.0F) + 1.0F) * 0.5F;
+        const float colorT = (std::sin(state.pulseTime * kFocusHighlightPulseSpeed) + 1.0F) * 0.5F;
+
+        const Color highlight1 = focusHighlightColor1_;
+        const Color highlight2 = focusHighlightColor2_;
+        const Color pulseColor = LerpColor(highlight2, highlight1, colorT);
+        const Color glowColor = LerpColor(highlight1, highlight2, 0.35F);
+
+        const float glowPosition1 = gradientX * totalLength;
+        const float glowPosition2 = (1.0F - gradientY) * totalLength;
+        const float glowSpan = std::max(48.0F, kFocusHighlightGlowSpanPixels);
+
+        float traversed = 0.0F;
+        for (std::size_t index = 0; index < path.size(); ++index)
+        {
+            const std::size_t nextIndex = (index + 1) % path.size();
+            const Vector2 start = path[index];
+            const Vector2 end = path[nextIndex];
+            const float dx = end.x - start.x;
+            const float dy = end.y - start.y;
+            const float segmentLength = std::sqrt(dx * dx + dy * dy);
+            if (segmentLength <= 0.0001F)
+            {
+                continue;
+            }
+
+            const float midDistance = traversed + segmentLength * 0.5F;
+            const float distance1 = WrapDistance(midDistance, glowPosition1, totalLength);
+            const float distance2 = WrapDistance(midDistance, glowPosition2, totalLength);
+            const float glowWeight1 = std::clamp(1.0F - distance1 / glowSpan, 0.0F, 1.0F);
+            const float glowWeight2 = std::clamp(1.0F - distance2 / glowSpan, 0.0F, 1.0F);
+            const float glowWeight = std::max(glowWeight1, glowWeight2);
+            Color segmentColor = LerpColor(
+                pulseColor,
+                glowColor,
+                0.25F + glowWeight * 0.75F);
+            segmentColor.a = borderAlpha * alphaScale * (0.90F + glowWeight * 0.25F);
+
+            queue.PushLine(start, end, segmentColor, thickness);
+            traversed += segmentLength;
+        }
+    };
+
+    for (int layer = 0; layer < static_cast<int>(kFocusHighlightShadowLayers); ++layer)
+    {
+        const float expansion = 2.0F + static_cast<float>(layer) * 2.5F;
+        const float offsetY = 1.0F + static_cast<float>(layer) * 1.5F;
+        const Rect shadowRect{
+            rect.x - expansion,
+            rect.y - expansion + offsetY,
+            rect.width + expansion * 2.0F,
+            rect.height + expansion * 2.0F,
+        };
+        const std::vector<Vector2> shadowPath = buildRoundedRectPath(shadowRect, cornerRadius + expansion);
+        drawShadowPath(
+            shadowPath,
+            kFocusHighlightGlowThickness + static_cast<float>(layer),
+            focusHighlight_.opacity * (0.12F - static_cast<float>(layer) * 0.025F));
+    }
+
+    const std::vector<Vector2> borderPath = buildRoundedRectPath(rect, cornerRadius);
+    const Rect glowRect{
+        rect.x - kFocusHighlightGlowThickness * 0.5F,
+        rect.y - kFocusHighlightGlowThickness * 0.5F,
+        rect.width + kFocusHighlightGlowThickness,
+        rect.height + kFocusHighlightGlowThickness,
+    };
+    const std::vector<Vector2> glowPath = buildRoundedRectPath(glowRect, cornerRadius + kFocusHighlightGlowThickness * 0.5F);
+
+    drawAnimatedPath(glowPath, kFocusHighlightGlowThickness, glowAlpha / std::max(0.001F, borderAlpha));
+    drawAnimatedPath(borderPath, kFocusHighlightThickness, 1.0F);
+}
+
+void Application::DrawFocusHighlight(RenderQueue& queue) const
+{
+    for (const FocusHighlightState& state : inactiveFocusHighlights_)
+    {
+        DrawFocusHighlightState(queue, state);
+    }
+    DrawFocusHighlightState(queue, focusHighlight_);
+}
+
+void Application::DrawFocusHighlightsForRoot(RenderQueue& queue, const std::shared_ptr<View>& root) const
+{
+    if (!root)
+    {
+        return;
+    }
+
+    if (preserveInactiveFocusHighlights_)
+    {
+        for (const FocusHighlightState& state : inactiveFocusHighlights_)
+        {
+            if (state.root.lock() == root)
+            {
+                DrawFocusHighlightState(queue, state);
+            }
+        }
+    }
+
+    if (focusHighlight_.root.lock() == root)
+    {
+        DrawFocusHighlightState(queue, focusHighlight_);
+    }
+}
+
+void Application::RemoveInactiveFocusHighlight(const std::shared_ptr<View>& root)
+{
+    if (!root)
+    {
+        return;
+    }
+
+    inactiveFocusHighlights_.erase(
+        std::remove_if(
+            inactiveFocusHighlights_.begin(),
+            inactiveFocusHighlights_.end(),
+            [&](const FocusHighlightState& state) {
+                return state.root.lock() == root;
+            }),
+        inactiveFocusHighlights_.end());
+}
+
+void Application::CaptureInactiveFocusHighlight(const std::shared_ptr<View>& root, const std::shared_ptr<View>& view)
+{
+    if (!root || !view)
+    {
+        return;
+    }
+
+    for (FocusHighlightState& state : inactiveFocusHighlights_)
+    {
+        if (state.root.lock() == root)
+        {
+            state.view = view;
+            state.root = root;
+            state.currentRect = focusHighlight_.currentRect;
+            state.targetRect = focusHighlight_.targetRect;
+            state.opacity = std::max(focusHighlight_.opacity, 1.0F);
+            state.targetOpacity = 1.0F;
+            state.pulseTime = focusHighlight_.pulseTime;
+            state.initialized = true;
+            return;
+        }
+    }
+
+    FocusHighlightState state = focusHighlight_;
+    state.view = view;
+    state.root = root;
+    state.opacity = std::max(focusHighlight_.opacity, 1.0F);
+    state.targetOpacity = 1.0F;
+    state.initialized = true;
+    inactiveFocusHighlights_.push_back(std::move(state));
+}
+
 std::shared_ptr<View> Application::FindTopmostViewAt(const Vector2& point) const
 {
-    std::vector<std::shared_ptr<View>> orderedViews = views_;
-    std::stable_sort(
-        orderedViews.begin(),
-        orderedViews.end(),
-        [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
-            if (!lhs || !rhs)
-            {
-                return static_cast<bool>(lhs);
-            }
-            return lhs->GetZIndex() > rhs->GetZIndex();
-        });
-
-    for (const auto& view : orderedViews)
+    for (const auto& view : OrderedViews(true))
     {
         if (!view || !view->IsVisible())
         {
@@ -849,17 +1380,7 @@ std::shared_ptr<View> Application::FindFirstFocusableView() const
         return nullptr;
     };
 
-    std::vector<std::shared_ptr<View>> orderedViews = views_;
-    std::stable_sort(
-        orderedViews.begin(),
-        orderedViews.end(),
-        [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
-            if (!lhs || !rhs)
-            {
-                return static_cast<bool>(lhs);
-            }
-            return lhs->GetZIndex() < rhs->GetZIndex();
-        });
+    const std::vector<std::shared_ptr<View>>& orderedViews = OrderedViews(false);
 
     const std::shared_ptr<View> activeRoot = FindTopmostVisibleRoot(orderedViews);
     if (activeRoot)
@@ -888,6 +1409,34 @@ std::shared_ptr<View> Application::FindFirstFocusableView() const
         }
     }
     return nullptr;
+}
+
+void Application::InvalidateViewOrderCache()
+{
+    viewOrderCacheDirty_ = true;
+}
+
+const std::vector<std::shared_ptr<View>>& Application::OrderedViews(bool descending) const
+{
+    if (viewOrderCacheDirty_)
+    {
+        orderedViewsAscendingCache_ = views_;
+        std::stable_sort(
+            orderedViewsAscendingCache_.begin(),
+            orderedViewsAscendingCache_.end(),
+            [](const std::shared_ptr<View>& lhs, const std::shared_ptr<View>& rhs) {
+                if (!lhs || !rhs)
+                {
+                    return static_cast<bool>(lhs);
+                }
+                return lhs->GetZIndex() < rhs->GetZIndex();
+            });
+        orderedViewsDescendingCache_ = orderedViewsAscendingCache_;
+        std::reverse(orderedViewsDescendingCache_.begin(), orderedViewsDescendingCache_.end());
+        viewOrderCacheDirty_ = false;
+    }
+
+    return descending ? orderedViewsDescendingCache_ : orderedViewsAscendingCache_;
 }
 
 bool Application::IsDirectionalKey(const InputState::KeyEvent& key, NavigationDirection direction)
@@ -930,11 +1479,16 @@ void Application::ResetState()
     descriptor_ = ApplicationDesc{};
     arguments_.clear();
     views_.clear();
+    orderedViewsAscendingCache_.clear();
+    orderedViewsDescendingCache_.clear();
+    viewOrderCacheDirty_ = true;
     renderQueue_.Clear();
     metaData_.Clear();
     inputState_ = {};
     focusedView_.reset();
     pressedView_.reset();
+    focusHighlight_ = FocusHighlightState{};
+    inactiveFocusHighlights_.clear();
     frameIndex_ = 0;
     initialized_ = false;
     running_ = false;

@@ -174,6 +174,7 @@ public:
 
     bool Init() override
     {
+        std::fprintf(stdout, "deko3d: init begin\n");
         device_ = dk::DeviceMaker{}.create();
         queue_ = dk::QueueMaker{device_}.setFlags(DkQueueFlags_Graphics).create();
         imagePool_.emplace(device_, DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image, kImagePoolSize);
@@ -184,6 +185,7 @@ public:
         cmdMem_ = dataPool_->allocate(kStaticCmdSize);
         if (!cmdMem_)
         {
+            std::fprintf(stderr, "deko3d: failed to allocate command memory\n");
             return false;
         }
         cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
@@ -198,10 +200,13 @@ public:
         );
         if (!textureDescriptorMemory_ || !samplerDescriptorMemory_)
         {
+            std::fprintf(stderr, "deko3d: failed to allocate descriptor memory\n");
             return false;
         }
 
-        return CreateFramebufferResources();
+        const bool ok = CreateFramebufferResources();
+        std::fprintf(stdout, "deko3d: init %s\n", ok ? "ok" : "failed");
+        return ok;
     }
 
     void Shutdown() override
@@ -505,9 +510,20 @@ public:
         dk::RasterizerState rasterizerState;
         dk::ColorState colorState;
         dk::ColorWriteState colorWriteState;
+        dk::BlendState blendState;
+        rasterizerState.setCullMode(DkFace_None);
+        const std::array<DkBlendState, 1> blendStates = {{
+            blendState.setFactors(
+                DkBlendFactor_SrcAlpha,
+                DkBlendFactor_InvSrcAlpha,
+                DkBlendFactor_One,
+                DkBlendFactor_InvSrcAlpha),
+        }};
+        colorState.setBlendEnable(0, true);
         cmdBuf_.bindRasterizerState(rasterizerState);
         cmdBuf_.bindColorState(colorState);
         cmdBuf_.bindColorWriteState(colorWriteState);
+        cmdBuf_.bindBlendStates(0, blendStates);
     }
 
     void BindPipeline(CommandBufferHandle commandBuffer, PipelineHandle pipeline) override
@@ -629,6 +645,7 @@ private:
         DkShaderBinaryHeader header{};
         if (std::fread(&header, sizeof(header), 1, file) != 1)
         {
+            std::fprintf(stderr, "failed to read shader header: %s\n", path.c_str());
             std::fclose(file);
             return false;
         }
@@ -642,12 +659,14 @@ private:
         std::fclose(file);
         if (!ok)
         {
+            std::fprintf(stderr, "failed to read shader payload: %s\n", path.c_str());
             return false;
         }
 
         blob.codeMem = codePool_->allocate(code.size(), DK_SHADER_CODE_ALIGNMENT);
         if (!blob.codeMem)
         {
+            std::fprintf(stderr, "failed to allocate shader code memory: %s\n", path.c_str());
             return false;
         }
 
@@ -656,6 +675,7 @@ private:
             .setControl(blob.control.data())
             .setProgramId(0)
             .initialize(blob.shader);
+        std::fprintf(stdout, "deko3d: shader loaded %s\n", path.c_str());
         return true;
     }
 

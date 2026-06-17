@@ -24,22 +24,23 @@ float Box::GetSpacing() const
 
 void Box::SetBackgroundColor(const Color& color)
 {
-    backgroundColor_ = color;
+    View::SetBackgroundColor(color);
+    View::SetDrawBackground(true);
 }
 
 const Color& Box::GetBackgroundColor() const
 {
-    return backgroundColor_;
+    return View::GetBackgroundColor();
 }
 
 void Box::SetDrawBackground(bool enabled)
 {
-    drawBackground_ = enabled;
+    View::SetDrawBackground(enabled);
 }
 
 bool Box::IsBackgroundEnabled() const
 {
-    return drawBackground_;
+    return View::IsBackgroundEnabled();
 }
 
 Size Box::Measure(const Size& available) const
@@ -157,10 +158,7 @@ void Box::Layout()
 
 void Box::Draw(RenderQueue& queue) const
 {
-    if (drawBackground_ && frame_.width > 0.0F && frame_.height > 0.0F)
-    {
-        queue.PushRect(frame_, backgroundColor_);
-    }
+    (void)queue;
 }
 
 HBox::HBox()
