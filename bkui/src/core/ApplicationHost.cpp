@@ -40,6 +40,26 @@ bool ApplicationHost::Initialize(const ApplicationHostDesc& desc, int argc, cons
     return true;
 }
 
+bool ApplicationHost::Initialize(const ApplicationDesc& desc, int argc, const char* const* argv)
+{
+    ApplicationHostDesc hostDesc;
+    hostDesc.application = desc;
+    hostDesc.window = desc.window;
+    hostDesc.logicalSize = desc.logicalSize;
+    hostDesc.clearColor = desc.clearColor;
+    return Initialize(hostDesc, argc, argv);
+}
+
+bool ApplicationHost::Initialize(int argc, char** argv)
+{
+    return Initialize(ApplicationDesc{}, argc, const_cast<const char* const*>(argv));
+}
+
+bool ApplicationHost::Initialize(int argc, const char* const* argv)
+{
+    return Initialize(ApplicationDesc{}, argc, argv);
+}
+
 void ApplicationHost::Shutdown()
 {
     if (renderer_ != nullptr)
@@ -105,6 +125,7 @@ std::uint64_t ApplicationHost::MainLoop(const MainLoopDesc& desc)
             {
                 windowSize_ = ResolveWindowSize(platform_->GetWindowSize());
                 device_->Resize(windowSize_);
+                application_.SetWindowSize(windowSize_);
                 onResize_.Emit(*this, windowSize_);
             }
 
@@ -157,6 +178,7 @@ std::uint64_t ApplicationHost::MainLoop(const MainLoopDesc& desc)
         {
             windowSize_ = ResolveWindowSize(platform_->GetWindowSize());
             device_->Resize(windowSize_);
+            application_.SetWindowSize(windowSize_);
             onResize_.Emit(*this, windowSize_);
         }
 
@@ -215,17 +237,18 @@ const Device* ApplicationHost::GetDevice() const
 
 Vector2 ApplicationHost::GetWindowSize() const
 {
-    return windowSize_;
+    return application_.GetWindowSize();
 }
 
 void ApplicationHost::SetLogicalSize(Vector2 size)
 {
     logicalSize_ = size;
+    application_.SetLogicalSize(size);
 }
 
 Vector2 ApplicationHost::GetLogicalSize() const
 {
-    return ResolveLogicalSize();
+    return application_.GetLogicalSize();
 }
 
 void ApplicationHost::SetClearColor(const Color& color)
@@ -255,20 +278,22 @@ ApplicationHost::ResizeEvent& ApplicationHost::OnResize()
 
 bool ApplicationHost::InitializeApplication(const ApplicationHostDesc& desc, int argc, const char* const* argv)
 {
-    if (!application_.Initialize(desc.application, argc, argv))
+    const ApplicationDesc appDesc = ResolveApplicationDesc(desc);
+    if (!application_.Initialize(appDesc, argc, argv))
     {
         Logger::instance().Error("Unable to initialize bkui application.");
         return false;
     }
 
-    logicalSize_ = desc.logicalSize;
-    clearColor_ = desc.clearColor;
+    logicalSize_ = appDesc.logicalSize;
+    clearColor_ = appDesc.clearColor;
     return true;
 }
 
 bool ApplicationHost::CreateWindowRuntime(const ApplicationHostDesc& desc)
 {
-    platform_ = CreateDefaultPlatform(desc.window);
+    const ApplicationDesc appDesc = application_.GetDescriptor();
+    platform_ = CreateDefaultPlatform(appDesc.window);
     if (platform_ == nullptr || !platform_->Init())
     {
         Logger::instance().Error("Unable to initialize platform.");
@@ -288,6 +313,7 @@ bool ApplicationHost::CreateWindowRuntime(const ApplicationHostDesc& desc)
     }
 
     windowSize_ = ResolveWindowSize(platform_->GetWindowSize());
+    application_.SetWindowSize(windowSize_);
     swapchain_ = device_->GetMainSwapchain();
     commandBuffer_ = device_->CreateCommandBuffer();
     if (!IsValid(commandBuffer_))
@@ -332,6 +358,21 @@ bool ApplicationHost::PresentFrame()
     return true;
 }
 
+ApplicationDesc ApplicationHost::ResolveApplicationDesc(const ApplicationHostDesc& desc) const
+{
+    ApplicationDesc appDesc = desc.application;
+    if (!desc.window.title.empty())
+    {
+        appDesc.window = desc.window;
+    }
+    if (desc.logicalSize.x > 0.0F && desc.logicalSize.y > 0.0F)
+    {
+        appDesc.logicalSize = desc.logicalSize;
+    }
+    appDesc.clearColor = desc.clearColor;
+    return appDesc;
+}
+
 Vector2 ApplicationHost::ResolveWindowSize(Vector2 size) const
 {
     return Vector2{
@@ -342,11 +383,7 @@ Vector2 ApplicationHost::ResolveWindowSize(Vector2 size) const
 
 Vector2 ApplicationHost::ResolveLogicalSize() const
 {
-    if (logicalSize_.x > 0.0F && logicalSize_.y > 0.0F)
-    {
-        return logicalSize_;
-    }
-    return windowSize_;
+    return application_.GetLogicalSize();
 }
 
 }

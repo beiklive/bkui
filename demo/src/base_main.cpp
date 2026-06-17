@@ -1060,13 +1060,13 @@ Image BuildStatusPanel(const FontResource& font, const bk::InputState& input, co
             FormatFloat(input.mousePosition.y),
             std::string(input.mouseLeftDown ? "  L" : "") +
                 (input.mouseMiddleDown ? "  M" : "") +
-                (input.mouseRightDown ? "  R" : "")).str();
+                (input.mouseRightDown ? "  R" : ""));
     DrawText(panel, font, ToUtf32(pointerLine), 20, 86, 20.0F, 32, 43, 58);
 
     std::string touchLine = "Touch: ";
     if (input.touchCount == 0)
     {
-        touchLine = "status_panel/touch_inactive"_i18n.str();
+        touchLine = "status_panel/touch_inactive"_i18n;
     }
     else
     {
@@ -1075,16 +1075,16 @@ Image BuildStatusPanel(const FontResource& font, const bk::InputState& input, co
                         std::to_string(touch.id),
                         FormatFloat(touch.position.x),
                         FormatFloat(touch.position.y))
-                        .str();
+                        ;
     }
     DrawText(panel, font, ToUtf32(touchLine), 20, 116, 20.0F, 32, 43, 58);
 
     const std::string lastKey = "status_panel/last_key"_i18n(
         input.lastKeyEvent.name[0] != '\0' ? input.lastKeyEvent.name : "None",
-        std::string(input.lastKeyEvent.down ? " (down)" : (input.keyReleased ? " (up)" : ""))).str();
+        std::string(input.lastKeyEvent.down ? " (down)" : (input.keyReleased ? " (up)" : "")));
     DrawText(panel, font, ToUtf32(lastKey), 20, 146, 20.0F, 32, 43, 58);
 
-    const std::string heldKeys = "status_panel/held_keys"_i18n(JoinKeys(input)).str();
+    const std::string heldKeys = "status_panel/held_keys"_i18n(JoinKeys(input));
     DrawText(panel, font, ToUtf32(heldKeys), 20, 176, 20.0F, 32, 43, 58);
 
     std::string imeLine = "IME: ";

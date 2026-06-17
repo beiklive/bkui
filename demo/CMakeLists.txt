@@ -1,8 +1,6 @@
 add_executable(bkui_demo src/main.cpp)
-add_executable(bkui_perf_demo src/perf_demo.cpp)
-add_executable(bkui_ui_tree_demo src/ui_tree_demo.cpp)
 
-foreach(target bkui_demo bkui_perf_demo bkui_ui_tree_demo)
+foreach(target bkui_demo)
     target_link_libraries(${target} PRIVATE BeikUI::bkui)
     target_compile_features(${target} PRIVATE cxx_std_20)
     target_include_directories(
@@ -17,23 +15,15 @@ set_target_properties(
     PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${BKUI_RUNTIME_OUTPUT_DIR}"
 )
-set_target_properties(
-    bkui_perf_demo
-    PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${BKUI_RUNTIME_OUTPUT_DIR}"
-)
-set_target_properties(
-    bkui_ui_tree_demo
-    PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${BKUI_RUNTIME_OUTPUT_DIR}"
-)
 
 if(BKUI_PLATFORM_SWITCH)
+    # ── 构建变量：输出路径和资源目录 ──
     set(BKUI_SWITCH_ROMFS_DIR "${CMAKE_BINARY_DIR}/resources")
     set(BKUI_SWITCH_SHADER_DIR "${BKUI_SWITCH_ROMFS_DIR}/shaders")
     set(BKUI_SWITCH_NACP "${BKUI_RUNTIME_OUTPUT_DIR}/bkui_demo.nacp")
     set(BKUI_SWITCH_NRO "${BKUI_RUNTIME_OUTPUT_DIR}/bkui_demo.nro")
 
+    # 查找 devkitPro 工具链中的必要工具
     if(NOT NX_UAM_EXE)
         find_program(
             NX_UAM_EXE
@@ -66,6 +56,7 @@ if(BKUI_PLATFORM_SWITCH)
         )
     endif()
 
+    # ── 打包 bkui_demo.nro：编译着色器 + 复制资源 + 生成 NRO ──
     add_custom_target(
         bkui_demo.nro
         ALL
@@ -85,6 +76,7 @@ if(BKUI_PLATFORM_SWITCH)
         VERBATIM
     )
 else()
+    # ── 桌面平台：自动收集 resources/ 下所有文件 ──
     file(
         GLOB_RECURSE
         BKUI_DEMO_RESOURCES
@@ -92,6 +84,7 @@ else()
         "${CMAKE_SOURCE_DIR}/resources/*"
     )
 
+    # ── 每次构建时复制资源到可执行文件旁，资源变更时自动触发重新复制 ──
     add_custom_target(
         bkui_demo.resources
         ALL
@@ -102,7 +95,6 @@ else()
         VERBATIM
     )
 
+    # bkui_demo 启动前确保资源已复制
     add_dependencies(bkui_demo bkui_demo.resources)
-    add_dependencies(bkui_perf_demo bkui_demo.resources)
-    add_dependencies(bkui_ui_tree_demo bkui_demo.resources)
 endif()

@@ -39,6 +39,19 @@ struct ShadowStyle
     bool enabled = false;
 };
 
+/// 聚焦框样式定义。Application 负责聚焦框移动逻辑，
+/// 每个 View 负责声明自己的聚焦框外观。
+struct FocusHighlightStyle
+{
+    Color color1{0.34F, 0.76F, 1.0F, 1.0F};
+    Color color2{0.76F, 0.52F, 1.0F, 1.0F};
+    float cornerRadius = -1.0F;
+    float inset = 6.0F;
+    float thickness = 3.0F;
+    float glowThickness = 5.0F;
+    bool enabled = true;
+};
+
 /// 焦点导航方向。
 enum class NavigationDirection
 {
@@ -125,6 +138,17 @@ public:
     void SetShadowSpread(float spread);
     /// 获取阴影扩张半径。
     [[nodiscard]] float GetShadowSpread() const;
+
+    /// 设置完整聚焦框样式。
+    void SetFocusHighlightStyle(const FocusHighlightStyle& style);
+    /// 获取聚焦框样式。
+    [[nodiscard]] const FocusHighlightStyle& GetFocusHighlightStyle() const;
+    /// 设置聚焦框圆角半径，负数表示跟随视图自身圆角。
+    void SetFocusHighlightCornerRadius(float radius);
+    /// 获取聚焦框圆角半径。
+    [[nodiscard]] float GetFocusHighlightCornerRadius() const;
+    /// 设置聚焦框高亮颜色。
+    void SetFocusHighlightColors(const Color& color1, const Color& color2);
 
     /// 设置视图外边距。
     void SetMargin(const EdgeInsets& margin);
@@ -366,6 +390,7 @@ protected:
     bool drawBackground_ = false;
     float cornerRadius_ = 0.0F;
     ShadowStyle shadow_{};
+    FocusHighlightStyle focusHighlightStyle_{};
     EdgeInsets margin_{};
     EdgeInsets padding_{};
     float width_ = kAutoValue;

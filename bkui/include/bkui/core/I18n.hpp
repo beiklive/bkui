@@ -16,6 +16,7 @@ class I18nString
 public:
     std::string str() const;
     std::u32string u32() const;
+    operator std::string() const { return str(); }
 
     template<typename... Args>
     I18nString operator()(Args&&... args) const

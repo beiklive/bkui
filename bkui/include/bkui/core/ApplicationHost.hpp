@@ -36,6 +36,9 @@ public:
 
     /// 初始化应用上下文、平台窗口与默认图形后端。
     [[nodiscard]] bool Initialize(const ApplicationHostDesc& desc = {}, int argc = 0, const char* const* argv = nullptr);
+    [[nodiscard]] bool Initialize(const ApplicationDesc& desc, int argc = 0, const char* const* argv = nullptr);
+    [[nodiscard]] bool Initialize(int argc, char** argv);
+    [[nodiscard]] bool Initialize(int argc, const char* const* argv);
 
     /// 关闭图形运行时、平台窗口和应用上下文。
     void Shutdown();
@@ -83,6 +86,7 @@ private:
     [[nodiscard]] bool InitializeApplication(const ApplicationHostDesc& desc, int argc, const char* const* argv);
     [[nodiscard]] bool CreateWindowRuntime(const ApplicationHostDesc& desc);
     [[nodiscard]] bool PresentFrame();
+    [[nodiscard]] ApplicationDesc ResolveApplicationDesc(const ApplicationHostDesc& desc) const;
     [[nodiscard]] Vector2 ResolveWindowSize(Vector2 size) const;
     [[nodiscard]] Vector2 ResolveLogicalSize() const;
 

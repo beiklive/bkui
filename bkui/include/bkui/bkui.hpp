@@ -27,3 +27,6 @@
 #include <stb_image.h>
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
+
+// 启用i18n宏定义，允许使用"_i18n"字面量操作符进行国际化字符串处理
+#define BK_MACRO_USE_I18N  using bk::operator""_i18n;

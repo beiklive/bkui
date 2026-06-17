@@ -26,6 +26,10 @@ struct ApplicationDesc
     std::string organization;
     std::string identifier;
     LoggerDesc logger{};
+    WindowDesc window{};
+    Vector2 logicalSize{};
+    Color clearColor{0.0F, 0.0F, 0.0F, 1.0F};
+    bool autoResizeRootViews = true;
 };
 
 /// 应用主循环配置。
@@ -45,6 +49,7 @@ public:
     using LifecycleEvent = Event<void(Application&)>;
     using DescriptorChangedEvent = Event<void(Application&, const ApplicationDesc&)>;
     using FrameEvent = Event<void(Application&, float, std::uint64_t)>;
+    using ResizeEvent = Event<void(Application&, Vector2)>;
 
     Application();
     ~Application();
@@ -187,10 +192,31 @@ public:
     /// 获取帧结束事件。
     [[nodiscard]] FrameEvent& OnFrameEnd();
 
-    /// 设置聚焦框圆角半径，0 表示直角。
+    /// 设置当前窗口尺寸，并按需自动调整顶层 View。
+    void SetWindowSize(Vector2 size);
+
+    /// 获取当前窗口尺寸。
+    [[nodiscard]] Vector2 GetWindowSize() const;
+
+    /// 设置 RenderQueue 输出时使用的逻辑尺寸。
+    void SetLogicalSize(Vector2 size);
+
+    /// 获取 RenderQueue 输出时使用的逻辑尺寸。
+    [[nodiscard]] Vector2 GetLogicalSize() const;
+
+    /// 设置是否在窗口/逻辑尺寸变化时自动铺满顶层 View。
+    void SetAutoResizeRootViews(bool enabled);
+
+    /// 查询是否自动铺满顶层 View。
+    [[nodiscard]] bool IsAutoResizeRootViewsEnabled() const;
+
+    /// 获取窗口尺寸变化事件。大多数页面无需订阅，Application 会自动处理根视图尺寸。
+    [[nodiscard]] ResizeEvent& OnResize();
+
+    /// 设置聚焦框圆角半径，0 表示直角。已弃用：请在 View 上设置聚焦框样式。
     void SetFocusHighlightCornerRadius(float radius);
 
-    /// 获取聚焦框圆角半径。
+    /// 获取默认聚焦框圆角半径。已弃用：请在 View 上获取聚焦框样式。
     [[nodiscard]] float GetFocusHighlightCornerRadius() const;
 
     /// 设置是否启用聚焦框移动动画。
@@ -199,16 +225,16 @@ public:
     /// 查询聚焦框移动动画是否启用。
     [[nodiscard]] bool IsFocusHighlightMotionEnabled() const;
 
-    /// 设置聚焦框高亮主色 1。
+    /// 设置默认聚焦框高亮主色 1。已弃用：请在 View 上设置聚焦框样式。
     void SetFocusHighlightColor1(const Color& color);
 
-    /// 获取聚焦框高亮主色 1。
+    /// 获取默认聚焦框高亮主色 1。已弃用：请在 View 上获取聚焦框样式。
     [[nodiscard]] const Color& GetFocusHighlightColor1() const;
 
-    /// 设置聚焦框高亮主色 2。
+    /// 设置默认聚焦框高亮主色 2。已弃用：请在 View 上设置聚焦框样式。
     void SetFocusHighlightColor2(const Color& color);
 
-    /// 获取聚焦框高亮主色 2。
+    /// 获取默认聚焦框高亮主色 2。已弃用：请在 View 上获取聚焦框样式。
     [[nodiscard]] const Color& GetFocusHighlightColor2() const;
 
     /// 设置是否保留非活动顶层 View 的聚焦框。
@@ -227,10 +253,12 @@ private:
         float opacity = 0.0F;
         float targetOpacity = 0.0F;
         float pulseTime = 0.0F;
+        FocusHighlightStyle style{};
         bool initialized = false;
     };
 
     void ProcessInput();
+    void ApplyRootViewFrames();
     void UpdateFocusHighlight(float deltaSeconds);
     void UpdateFocusHighlightState(FocusHighlightState& state, const std::shared_ptr<View>& trackedView, float deltaSeconds, float targetOpacity);
     void DrawFocusHighlight(RenderQueue& queue) const;
@@ -262,11 +290,12 @@ private:
     std::weak_ptr<View> pressedView_{};
     FocusHighlightState focusHighlight_{};
     std::vector<FocusHighlightState> inactiveFocusHighlights_{};
-    float focusHighlightCornerRadius_ = 14.0F;
+    FocusHighlightStyle defaultFocusHighlightStyle_{};
     bool focusHighlightMotionEnabled_ = true;
     bool preserveInactiveFocusHighlights_ = false;
-    Color focusHighlightColor1_{0.34F, 0.76F, 1.0F, 1.0F};
-    Color focusHighlightColor2_{0.76F, 0.52F, 1.0F, 1.0F};
+    Vector2 windowSize_{1280.0F, 720.0F};
+    Vector2 logicalSize_{};
+    bool autoResizeRootViews_ = true;
     std::uint64_t frameIndex_ = 0;
     bool initialized_ = false;
     bool running_ = false;
@@ -278,6 +307,7 @@ private:
     DescriptorChangedEvent onDescriptorChanged_{};
     FrameEvent onFrameBegin_{};
     FrameEvent onFrameEnd_{};
+    ResizeEvent onResize_{};
 };
 
 }

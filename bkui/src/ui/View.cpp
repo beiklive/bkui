@@ -246,6 +246,35 @@ float View::GetShadowSpread() const
     return shadow_.spread;
 }
 
+void View::SetFocusHighlightStyle(const FocusHighlightStyle& style)
+{
+    focusHighlightStyle_ = style;
+    focusHighlightStyle_.inset = PositiveOrZero(focusHighlightStyle_.inset);
+    focusHighlightStyle_.thickness = PositiveOrZero(focusHighlightStyle_.thickness);
+    focusHighlightStyle_.glowThickness = PositiveOrZero(focusHighlightStyle_.glowThickness);
+}
+
+const FocusHighlightStyle& View::GetFocusHighlightStyle() const
+{
+    return focusHighlightStyle_;
+}
+
+void View::SetFocusHighlightCornerRadius(float radius)
+{
+    focusHighlightStyle_.cornerRadius = radius < 0.0F ? -1.0F : radius;
+}
+
+float View::GetFocusHighlightCornerRadius() const
+{
+    return focusHighlightStyle_.cornerRadius;
+}
+
+void View::SetFocusHighlightColors(const Color& color1, const Color& color2)
+{
+    focusHighlightStyle_.color1 = color1;
+    focusHighlightStyle_.color2 = color2;
+}
+
 void View::SetMargin(const EdgeInsets& margin)
 {
     margin_ = margin;

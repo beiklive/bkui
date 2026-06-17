@@ -101,4 +101,9 @@ private:
     bool initialized_ = false;
 };
 
+
+
 }
+
+#define BKLog bk::Logger::instance()
+

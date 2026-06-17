@@ -1,5 +1,6 @@
 #include <bkui/core/Application.hpp>
-
+#include <bkui/core/FileSystem.hpp>
+#include <bkui/core/I18n.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -16,9 +17,6 @@ Application* Application::activeApplication_ = nullptr;
 namespace
 {
 constexpr float kNavigationEpsilon = 0.001F;
-constexpr float kFocusHighlightInset = 6.0F;
-constexpr float kFocusHighlightThickness = 3.0F;
-constexpr float kFocusHighlightGlowThickness = 5.0F;
 constexpr float kFocusHighlightLerpSpeed = 14.0F;
 constexpr float kFocusHighlightOpacitySpeed = 10.0F;
 constexpr float kFocusHighlightSegmentLength = 8.0F;
@@ -369,11 +367,27 @@ bool Application::Initialize(const ApplicationDesc& desc, int argc, const char* 
     }
 
     descriptor_ = desc;
+    logicalSize_ = desc.logicalSize;
+    windowSize_ = Vector2{
+        desc.window.width > 0 ? static_cast<float>(desc.window.width) : 1280.0F,
+        desc.window.height > 0 ? static_cast<float>(desc.window.height) : 720.0F,
+    };
+    autoResizeRootViews_ = desc.autoResizeRootViews;
     CaptureArguments(argc, argv);
     metaData_.Clear();
     StoreDescriptorMetaData();
     frameIndex_ = 0;
     renderQueue_.Clear();
+
+    // 初始化文件挂载系统
+    {
+        bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
+        bk::FileSystem::Mount("resources");
+    }
+    // 初始化国际化系统，自动获取系统语言并加载对应翻译文件
+    {
+        bk::I18n::Instance().Init("i18n");
+    }
 
     if (!Logger::instance().Initialize(descriptor_.logger))
     {
@@ -445,6 +459,7 @@ void Application::AddView(std::shared_ptr<View> view)
     if (view)
     {
         views_.push_back(std::move(view));
+        ApplyRootViewFrames();
         InvalidateViewOrderCache();
     }
 }
@@ -467,6 +482,7 @@ void Application::RemoveView(const std::shared_ptr<View>& view)
     if (it != views_.end())
     {
         views_.erase(it, views_.end());
+        ApplyRootViewFrames();
         InvalidateViewOrderCache();
     }
 }
@@ -501,6 +517,10 @@ std::uint64_t Application::GetFrameIndex() const
 void Application::SetInputState(const InputState& input)
 {
     inputState_ = input;
+    if (input.windowResized && input.windowSize.x > 0.0F && input.windowSize.y > 0.0F)
+    {
+        SetWindowSize(input.windowSize);
+    }
 }
 
 const InputState& Application::GetInputState() const
@@ -695,7 +715,10 @@ std::uint64_t Application::RunMainLoop(const MainLoopDesc& desc)
 void Application::SetDescriptor(const ApplicationDesc& desc)
 {
     descriptor_ = desc;
+    logicalSize_ = desc.logicalSize;
+    autoResizeRootViews_ = desc.autoResizeRootViews;
     StoreDescriptorMetaData();
+    ApplyRootViewFrames();
     onDescriptorChanged_.Emit(*this, descriptor_);
 }
 
@@ -784,12 +807,12 @@ std::string_view Application::GetExecutablePath() const
 
 void Application::SetFocusHighlightCornerRadius(float radius)
 {
-    focusHighlightCornerRadius_ = std::max(0.0F, radius);
+    defaultFocusHighlightStyle_.cornerRadius = std::max(0.0F, radius);
 }
 
 float Application::GetFocusHighlightCornerRadius() const
 {
-    return focusHighlightCornerRadius_;
+    return defaultFocusHighlightStyle_.cornerRadius;
 }
 
 void Application::SetFocusHighlightMotionEnabled(bool enabled)
@@ -818,22 +841,22 @@ bool Application::IsPreservingInactiveFocusHighlights() const
 
 void Application::SetFocusHighlightColor1(const Color& color)
 {
-    focusHighlightColor1_ = color;
+    defaultFocusHighlightStyle_.color1 = color;
 }
 
 const Color& Application::GetFocusHighlightColor1() const
 {
-    return focusHighlightColor1_;
+    return defaultFocusHighlightStyle_.color1;
 }
 
 void Application::SetFocusHighlightColor2(const Color& color)
 {
-    focusHighlightColor2_ = color;
+    defaultFocusHighlightStyle_.color2 = color;
 }
 
 const Color& Application::GetFocusHighlightColor2() const
 {
-    return focusHighlightColor2_;
+    return defaultFocusHighlightStyle_.color2;
 }
 
 Application::LifecycleEvent& Application::OnInitialize()
@@ -864,6 +887,58 @@ Application::FrameEvent& Application::OnFrameBegin()
 Application::FrameEvent& Application::OnFrameEnd()
 {
     return onFrameEnd_;
+}
+
+void Application::SetWindowSize(Vector2 size)
+{
+    const Vector2 resolved{
+        size.x > 0.0F ? size.x : 1280.0F,
+        size.y > 0.0F ? size.y : 720.0F,
+    };
+    if (NearlyEqual(windowSize_.x, resolved.x) && NearlyEqual(windowSize_.y, resolved.y))
+    {
+        return;
+    }
+
+    windowSize_ = resolved;
+    ApplyRootViewFrames();
+    onResize_.Emit(*this, windowSize_);
+}
+
+Vector2 Application::GetWindowSize() const
+{
+    return windowSize_;
+}
+
+void Application::SetLogicalSize(Vector2 size)
+{
+    logicalSize_ = size;
+    ApplyRootViewFrames();
+}
+
+Vector2 Application::GetLogicalSize() const
+{
+    if (logicalSize_.x > 0.0F && logicalSize_.y > 0.0F)
+    {
+        return logicalSize_;
+    }
+    return windowSize_;
+}
+
+void Application::SetAutoResizeRootViews(bool enabled)
+{
+    autoResizeRootViews_ = enabled;
+    ApplyRootViewFrames();
+}
+
+bool Application::IsAutoResizeRootViewsEnabled() const
+{
+    return autoResizeRootViews_;
+}
+
+Application::ResizeEvent& Application::OnResize()
+{
+    return onResize_;
 }
 
 void Application::ProcessInput()
@@ -961,6 +1036,28 @@ void Application::ProcessInput()
     }
 }
 
+void Application::ApplyRootViewFrames()
+{
+    if (!autoResizeRootViews_)
+    {
+        return;
+    }
+
+    const Vector2 size = GetLogicalSize();
+    if (size.x <= 0.0F || size.y <= 0.0F)
+    {
+        return;
+    }
+
+    for (const auto& view : views_)
+    {
+        if (view)
+        {
+            view->SetFrame(Rect{0.0F, 0.0F, size.x, size.y});
+        }
+    }
+}
+
 void Application::UpdateFocusHighlightState(
     FocusHighlightState& state,
     const std::shared_ptr<View>& trackedView,
@@ -971,14 +1068,16 @@ void Application::UpdateFocusHighlightState(
 
     if (trackedView && trackedView->IsVisible())
     {
+        state.style = trackedView->GetFocusHighlightStyle();
         const Rect frame = trackedView->GetFrame();
+        const float inset = std::max(0.0F, state.style.inset);
         state.targetRect = Rect{
-            frame.x - kFocusHighlightInset,
-            frame.y - kFocusHighlightInset,
-            frame.width + kFocusHighlightInset * 2.0F,
-            frame.height + kFocusHighlightInset * 2.0F,
+            frame.x - inset,
+            frame.y - inset,
+            frame.width + inset * 2.0F,
+            frame.height + inset * 2.0F,
         };
-        state.targetOpacity = targetOpacity;
+        state.targetOpacity = state.style.enabled ? targetOpacity : 0.0F;
 
         if (!state.initialized)
         {
@@ -1061,7 +1160,7 @@ void Application::UpdateFocusHighlight(float deltaSeconds)
 
 void Application::DrawFocusHighlightState(RenderQueue& queue, const FocusHighlightState& state) const
 {
-    if (!state.initialized || state.opacity <= 0.01F)
+    if (!state.initialized || !state.style.enabled || state.opacity <= 0.01F)
     {
         return;
     }
@@ -1076,10 +1175,14 @@ void Application::DrawFocusHighlightState(RenderQueue& queue, const FocusHighlig
     const float glowAlpha = state.opacity * (0.14F + pulse * 0.10F);
     const float borderAlpha = state.opacity * (0.82F + pulse * 0.10F);
 
+    const std::shared_ptr<View> trackedView = state.view.lock();
+    const float preferredCornerRadius = state.style.cornerRadius >= 0.0F
+        ? state.style.cornerRadius
+        : (trackedView ? trackedView->GetCornerRadius() + std::max(0.0F, state.style.inset) : 0.0F);
     const float cornerRadius = std::max(
         0.0F,
         std::min({
-            focusHighlightCornerRadius_,
+            preferredCornerRadius,
             rect.width * 0.5F,
             rect.height * 0.5F,
         }));
@@ -1186,8 +1289,8 @@ void Application::DrawFocusHighlightState(RenderQueue& queue, const FocusHighlig
         const float gradientY = (std::sin(state.pulseTime / kFocusHighlightTravelSpeed / 3.0F) + 1.0F) * 0.5F;
         const float colorT = (std::sin(state.pulseTime * kFocusHighlightPulseSpeed) + 1.0F) * 0.5F;
 
-        const Color highlight1 = focusHighlightColor1_;
-        const Color highlight2 = focusHighlightColor2_;
+        const Color highlight1 = state.style.color1;
+        const Color highlight2 = state.style.color2;
         const Color pulseColor = LerpColor(highlight2, highlight1, colorT);
         const Color glowColor = LerpColor(highlight1, highlight2, 0.35F);
 
@@ -1239,21 +1342,22 @@ void Application::DrawFocusHighlightState(RenderQueue& queue, const FocusHighlig
         const std::vector<Vector2> shadowPath = buildRoundedRectPath(shadowRect, cornerRadius + expansion);
         drawShadowPath(
             shadowPath,
-            kFocusHighlightGlowThickness + static_cast<float>(layer),
-            focusHighlight_.opacity * (0.12F - static_cast<float>(layer) * 0.025F));
+            std::max(0.0F, state.style.glowThickness) + static_cast<float>(layer),
+            state.opacity * (0.12F - static_cast<float>(layer) * 0.025F));
     }
 
     const std::vector<Vector2> borderPath = buildRoundedRectPath(rect, cornerRadius);
+    const float glowThickness = std::max(0.0F, state.style.glowThickness);
     const Rect glowRect{
-        rect.x - kFocusHighlightGlowThickness * 0.5F,
-        rect.y - kFocusHighlightGlowThickness * 0.5F,
-        rect.width + kFocusHighlightGlowThickness,
-        rect.height + kFocusHighlightGlowThickness,
+        rect.x - glowThickness * 0.5F,
+        rect.y - glowThickness * 0.5F,
+        rect.width + glowThickness,
+        rect.height + glowThickness,
     };
-    const std::vector<Vector2> glowPath = buildRoundedRectPath(glowRect, cornerRadius + kFocusHighlightGlowThickness * 0.5F);
+    const std::vector<Vector2> glowPath = buildRoundedRectPath(glowRect, cornerRadius + glowThickness * 0.5F);
 
-    drawAnimatedPath(glowPath, kFocusHighlightGlowThickness, glowAlpha / std::max(0.001F, borderAlpha));
-    drawAnimatedPath(borderPath, kFocusHighlightThickness, 1.0F);
+    drawAnimatedPath(glowPath, glowThickness, glowAlpha / std::max(0.001F, borderAlpha));
+    drawAnimatedPath(borderPath, std::max(0.0F, state.style.thickness), 1.0F);
 }
 
 void Application::DrawFocusHighlight(RenderQueue& queue) const
@@ -1489,6 +1593,10 @@ void Application::ResetState()
     pressedView_.reset();
     focusHighlight_ = FocusHighlightState{};
     inactiveFocusHighlights_.clear();
+    defaultFocusHighlightStyle_ = FocusHighlightStyle{};
+    windowSize_ = Vector2{1280.0F, 720.0F};
+    logicalSize_ = {};
+    autoResizeRootViews_ = true;
     frameIndex_ = 0;
     initialized_ = false;
     running_ = false;
@@ -1501,6 +1609,10 @@ void Application::StoreDescriptorMetaData()
     metaData_.Set("application.version", descriptor_.version);
     metaData_.Set("application.organization", descriptor_.organization);
     metaData_.Set("application.identifier", descriptor_.identifier);
+    metaData_.Set("application.window_width", static_cast<std::uint32_t>(std::max(0.0F, windowSize_.x)));
+    metaData_.Set("application.window_height", static_cast<std::uint32_t>(std::max(0.0F, windowSize_.y)));
+    metaData_.Set("application.logical_width", static_cast<std::uint32_t>(std::max(0.0F, GetLogicalSize().x)));
+    metaData_.Set("application.logical_height", static_cast<std::uint32_t>(std::max(0.0F, GetLogicalSize().y)));
     metaData_.Set("application.argument_count", static_cast<std::uint32_t>(arguments_.size()));
     metaData_.Set("application.executable", std::string(GetExecutablePath()));
 }
