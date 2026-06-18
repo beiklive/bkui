@@ -384,15 +384,7 @@ bool Application::Initialize(const ApplicationDesc& desc, int argc, const char* 
     frameIndex_ = 0;
     renderQueue_.Clear();
 
-    // 初始化文件挂载系统
-    {
-        bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
-        bk::FileSystem::Mount("resources");
-    }
-    // 初始化国际化系统，自动获取系统语言并加载对应翻译文件
-    {
-        bk::I18n::Instance().Init("i18n");
-    }
+
 
     if (!bklog.Initialize(descriptor_.logger))
     {
@@ -527,6 +519,7 @@ void Application::SetInputState(const InputState& input)
     {
         SetWindowSize(input.windowSize);
     }
+    NormalizeInputCoordinates();
 }
 
 const InputState& Application::GetInputState() const
@@ -1040,6 +1033,45 @@ void Application::ProcessInput()
             focused->DispatchClick(center);
         }
     }
+}
+
+Vector2 Application::WindowToLogicalPoint(Vector2 point, Vector2 sourceWindowSize) const
+{
+    const Vector2 logicalSize = GetLogicalSize();
+    const float sourceWidth = sourceWindowSize.x > 0.0F ? sourceWindowSize.x : windowSize_.x;
+    const float sourceHeight = sourceWindowSize.y > 0.0F ? sourceWindowSize.y : windowSize_.y;
+    const float scaleX = sourceWidth > 0.0F ? logicalSize.x / sourceWidth : 1.0F;
+    const float scaleY = sourceHeight > 0.0F ? logicalSize.y / sourceHeight : 1.0F;
+    return Vector2{
+        point.x * scaleX,
+        point.y * scaleY,
+    };
+}
+
+void Application::NormalizeInputCoordinates()
+{
+    const Vector2 sourceWindowSize = inputState_.windowSize.x > 0.0F && inputState_.windowSize.y > 0.0F
+        ? inputState_.windowSize
+        : windowSize_;
+    const Vector2 logicalSize = GetLogicalSize();
+    const float sourceWidth = sourceWindowSize.x > 0.0F ? sourceWindowSize.x : windowSize_.x;
+    const float sourceHeight = sourceWindowSize.y > 0.0F ? sourceWindowSize.y : windowSize_.y;
+    const float scaleX = sourceWidth > 0.0F ? logicalSize.x / sourceWidth : 1.0F;
+    const float scaleY = sourceHeight > 0.0F ? logicalSize.y / sourceHeight : 1.0F;
+
+    inputState_.mousePosition = WindowToLogicalPoint(inputState_.mousePosition, sourceWindowSize);
+    inputState_.mouseDelta = Vector2{
+        inputState_.mouseDelta.x * scaleX,
+        inputState_.mouseDelta.y * scaleY,
+    };
+
+    for (std::size_t index = 0; index < inputState_.touchCount && index < inputState_.touchPoints.size(); ++index)
+    {
+        inputState_.touchPoints[index].position =
+            WindowToLogicalPoint(inputState_.touchPoints[index].position, sourceWindowSize);
+    }
+
+    inputState_.windowSize = GetLogicalSize();
 }
 
 void Application::ApplyRootViewFrames()

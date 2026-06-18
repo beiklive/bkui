@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -77,13 +78,13 @@ public:
         : bk::Button(std::move(title))
         , subtitle_(std::move(subtitle))
     {
-        // 统一按钮外观：较高的触控面积、圆角以及投影，便于演示焦点高亮。
-        SetPadding(14.0F);
-        SetMinHeight(92.0F);
-        SetCornerRadius(16.0F);
+        // 统一按钮外观：稍微收紧尺寸，让窗口重排后密度更舒服。
+        SetPadding(11.0F);
+        SetMinHeight(74.0F);
+        SetCornerRadius(14.0F);
         SetShadowEnabled(true);
-        SetShadowOffset(0.0F, 8.0F);
-        SetShadowBlurRadius(14.0F);
+        SetShadowOffset(0.0F, 6.0F);
+        SetShadowBlurRadius(12.0F);
         SetShadowSpread(2.0F);
         SetShadowColor(bk::ColorRGBA{0.0F, 0.0F, 0.0F, 0.18F});
     }
@@ -108,14 +109,14 @@ public:
         // 主标题放在上方，副标题占据下方剩余内容区。
         const bk::Rect content = GetContentFrame();
         queue.PushText(
-            bk::Rect{content.x, content.y, content.width, 28.0F},
+            bk::Rect{content.x, content.y, content.width, 24.0F},
             GetText(),
-            22.0F,
+            18.0F,
             GetTextColor());
         queue.PushText(
-            bk::Rect{content.x, content.y + 34.0F, content.width, std::max(0.0F, content.height - 34.0F)},
+            bk::Rect{content.x, content.y + 28.0F, content.width, std::max(0.0F, content.height - 28.0F)},
             subtitle_,
-            15.0F,
+            13.0F,
             bk::ColorRGBA{0.86F, 0.90F, 0.96F, 1.0F});
     }
 
@@ -131,6 +132,161 @@ protected:
 
 private:
     std::string subtitle_;
+    Callback callback_{};
+};
+
+class SizeScrollbar final : public bk::View
+{
+public:
+    using Callback = std::function<void(float)>;
+
+    SizeScrollbar()
+    {
+        SetName("SizeScrollbar");
+        SetFocusable(true);
+        SetMinHeight(34.0F);
+        SetFocusHighlightCornerRadius(18.0F);
+    }
+
+    void SetRange(float minimum, float maximum)
+    {
+        minValue_ = std::min(minimum, maximum);
+        maxValue_ = std::max(minimum, maximum);
+        SetValue(value_);
+    }
+
+    void SetValue(float value)
+    {
+        const float clamped = std::clamp(value, minValue_, maxValue_);
+        if (value_ == clamped)
+        {
+            return;
+        }
+
+        value_ = clamped;
+        InvalidateLayout();
+    }
+
+    [[nodiscard]] float GetValue() const
+    {
+        return value_;
+    }
+
+    void SetCallback(Callback callback)
+    {
+        callback_ = std::move(callback);
+    }
+
+    bk::Size Measure(const bk::Size& available) const override
+    {
+        return bk::Size{
+            std::max(180.0F, std::min(available.width, 320.0F)),
+            34.0F,
+        };
+    }
+
+protected:
+    void Draw(bk::RenderQueue& queue) const override
+    {
+        const bk::Rect content = GetContentFrame();
+        const bk::Rect track{
+            content.x,
+            content.y + (content.height - 8.0F) * 0.5F,
+            content.width,
+            8.0F,
+        };
+        const bk::Rect thumb = ThumbRect();
+
+        queue.PushRoundedRect(track, bk::ColorRGBA{0.18F, 0.24F, 0.34F, 1.0F}, 4.0F);
+        queue.PushRoundedRect(
+            thumb,
+            dragging_
+                ? bk::ColorRGBA{0.90F, 0.95F, 1.0F, 1.0F}
+                : (HasFocus()
+                    ? bk::ColorRGBA{0.78F, 0.88F, 1.0F, 1.0F}
+                    : bk::ColorRGBA{0.63F, 0.74F, 0.92F, 1.0F}),
+            thumb.height * 0.5F);
+    }
+
+    void PointerDown(const bk::Vector2& position) override
+    {
+        dragging_ = true;
+        UpdateFromPosition(position.x);
+    }
+
+    void PointerMove(const bk::Vector2& position) override
+    {
+        if (dragging_)
+        {
+            UpdateFromPosition(position.x);
+        }
+    }
+
+    void PointerUp(const bk::Vector2&) override
+    {
+        dragging_ = false;
+    }
+
+    void KeyDown(const bk::InputState::KeyEvent& key) override
+    {
+        if (std::strcmp(key.name, "Left") == 0)
+        {
+            SetValueAndNotify(value_ - 12.0F);
+        }
+        else if (std::strcmp(key.name, "Right") == 0)
+        {
+            SetValueAndNotify(value_ + 12.0F);
+        }
+    }
+
+private:
+    [[nodiscard]] float Normalized() const
+    {
+        const float span = maxValue_ - minValue_;
+        if (span <= 0.0001F)
+        {
+            return 0.0F;
+        }
+
+        return std::clamp((value_ - minValue_) / span, 0.0F, 1.0F);
+    }
+
+    [[nodiscard]] bk::Rect ThumbRect() const
+    {
+        const bk::Rect content = GetContentFrame();
+        const float thumbWidth = std::min(44.0F, std::max(28.0F, content.width * 0.14F));
+        const float travel = std::max(0.0F, content.width - thumbWidth);
+        return bk::Rect{
+            content.x + travel * Normalized(),
+            content.y + (content.height - 22.0F) * 0.5F,
+            thumbWidth,
+            22.0F,
+        };
+    }
+
+    void UpdateFromPosition(float x)
+    {
+        const bk::Rect content = GetContentFrame();
+        const float thumbWidth = std::min(44.0F, std::max(28.0F, content.width * 0.14F));
+        const float travel = std::max(1.0F, content.width - thumbWidth);
+        const float normalized = std::clamp((x - content.x - thumbWidth * 0.5F) / travel, 0.0F, 1.0F);
+        SetValueAndNotify(minValue_ + (maxValue_ - minValue_) * normalized);
+    }
+
+    void SetValueAndNotify(float value)
+    {
+        const float before = value_;
+        SetValue(value);
+        if (callback_ && before != value_)
+        {
+            callback_(value_);
+        }
+    }
+
+    float minValue_ = 260.0F;
+    float maxValue_ = 460.0F;
+    float value_ = 312.0F;
+    bool dragging_ = false;
     Callback callback_{};
 };
 
@@ -412,8 +568,8 @@ public:
 
         leftColumn_ = std::make_shared<bk::VBox>();
         leftColumn_->SetName("LeftColumn");
-        leftColumn_->SetWidth(320.0F);
-        leftColumn_->SetSpacing(18.0F);
+        leftColumn_->SetWidth(296.0F);
+        leftColumn_->SetSpacing(16.0F);
 
         // 导航面板演示普通按钮点击、焦点路径和打开模态层。
         navPanel_ = MakePanel("NavPanel", bk::ColorRGBA{0.93F, 0.95F, 0.99F, 1.0F});
@@ -476,7 +632,7 @@ public:
         rightColumn_ = std::make_shared<bk::VBox>();
         rightColumn_->SetName("RightColumn");
         rightColumn_->SetFlexGrow(1.0F);
-        rightColumn_->SetSpacing(18.0F);
+        rightColumn_->SetSpacing(16.0F);
 
         // 状态面板显示当前焦点、默认焦点、最近焦点、指针位置、输入事件和顶层 View 数量。
         statusPanel_ = MakePanel("StatusPanel", bk::ColorRGBA{0.11F, 0.15F, 0.23F, 1.0F});
@@ -499,12 +655,31 @@ public:
 
         lowerRow_ = std::make_shared<bk::HBox>();
         lowerRow_->SetName("LowerRow");
-        lowerRow_->SetSpacing(18.0F);
+        lowerRow_->SetSpacing(14.0F);
         lowerRow_->SetFlexGrow(1.0F);
+
+        treeSizePanel_ = MakePanel("TreeSizePanel", bk::ColorRGBA{0.11F, 0.15F, 0.23F, 1.0F});
+        treeSizePanel_->SetPaddingTop(14.0F);
+        treeSizePanel_->SetPaddingRight(16.0F);
+        treeSizePanel_->SetPaddingBottom(14.0F);
+        treeSizePanel_->SetPaddingLeft(16.0F);
+        treeSizePanel_->SetSpacing(10.0F);
+        treeSizeLabel_ = MakeLabel("Action Panel Scale", 18.0F, bk::ColorRGBA{0.96F, 0.97F, 0.99F, 1.0F});
+        treeSizeValueLabel_ = MakeLabel("", 15.0F, bk::ColorRGBA{0.77F, 0.84F, 0.93F, 1.0F});
+        treeSizeScrollbar_ = std::make_shared<SizeScrollbar>();
+        treeSizeScrollbar_->SetRange(kActionPanelMinScale * 100.0F, kActionPanelMaxScale * 100.0F);
+        treeSizeScrollbar_->SetValue(actionPanelScale_ * 100.0F);
+        treeSizeScrollbar_->SetCallback([this](float value) {
+            actionPanelScale_ = value / 100.0F;
+            actionPanel_->SetScale(actionPanelScale_);
+        });
+        treeSizePanel_->AddChild(treeSizeLabel_);
+        treeSizePanel_->AddChild(treeSizeValueLabel_);
+        treeSizePanel_->AddChild(treeSizeScrollbar_);
 
         // View 树面板用于观察当前 Application 中可见 View 的层级关系。
         treePanel_ = MakePanel("TreePanel", bk::ColorRGBA{0.93F, 0.95F, 0.99F, 1.0F});
-        treePanel_->SetWidth(338.0F);
+        treePanel_->SetWidth(318.0F);
         treeTitle_ = MakeLabel("tree/title"_i18n, 23.0F, bk::ColorRGBA{0.10F, 0.14F, 0.21F, 1.0F});
         treeSubtitle_ = MakeLabel("tree/subtitle"_i18n, 16.0F, bk::ColorRGBA{0.31F, 0.38F, 0.49F, 1.0F});
         treePanel_->AddChild(treeTitle_);
@@ -521,6 +696,7 @@ public:
         // 内容动作区提供另一组可聚焦按钮，用来测试跨区域方向导航。
         actionPanel_ = MakePanel("ActionPanel", bk::ColorRGBA{0.14F, 0.18F, 0.28F, 1.0F});
         actionPanel_->SetFlexGrow(1.0F);
+        actionPanel_->SetScale(actionPanelScale_);
         actionTitle_ = MakeLabel("action/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
         actionSubtitle_ = MakeLabel("action/subtitle"_i18n, 16.0F, bk::ColorRGBA{0.78F, 0.84F, 0.93F, 1.0F});
         actionRowTop_ = std::make_shared<bk::HBox>();
@@ -544,11 +720,13 @@ public:
         actionPanel_->AddChild(actionSubtitle_);
         actionPanel_->AddChild(actionRowTop_);
         actionPanel_->AddChild(actionRowBottom_);
+        actionPanel_->SetFocusHighlightCornerRadius(18.0F);
 
         lowerRow_->AddChild(treePanel_);
         lowerRow_->AddChild(actionPanel_);
 
         rightColumn_->AddChild(statusPanel_);
+        rightColumn_->AddChild(treeSizePanel_);
         rightColumn_->AddChild(lowerRow_);
 
         bodyRow_->AddChild(leftColumn_);
@@ -581,6 +759,7 @@ public:
                 std::to_string(static_cast<int>(windowSize.x)),
                 std::to_string(static_cast<int>(windowSize.y))));
         statusModal_->SetText("status/top_views"_i18n(std::to_string(app.GetViews().size())));
+        treeSizeValueLabel_->SetText("Scale: " + demo::FormatFloat(actionPanelScale_, 2) + "x");
 
         // 只在输入状态发生变化时更新提示文本，避免空闲帧覆盖最后一次输入提示。
         if (input.keyPressed)
@@ -670,6 +849,7 @@ public:
     void Layout() override
     {
         // ScrollView 占满整个页面，内部 rootColumn 由 ScrollView 管理滚动内容尺寸。
+        rootColumn_->SetWidth(std::max(kDesignWidth, frame_.width - 48.0F));
         rootScroll_->SetFrame(frame_);
         rootScroll_->Layout();
         needsLayout_ = false;
@@ -720,11 +900,11 @@ private:
         panel->SetShadowBlurRadius(16.0F);
         panel->SetShadowSpread(2.0F);
         panel->SetShadowColor(bk::ColorRGBA{0.0F, 0.0F, 0.0F, 0.16F});
-        panel->SetPaddingTop(18.0F);
-        panel->SetPaddingRight(18.0F);
-        panel->SetPaddingBottom(18.0F);
-        panel->SetPaddingLeft(18.0F);
-        panel->SetSpacing(12.0F);
+        panel->SetPaddingTop(16.0F);
+        panel->SetPaddingRight(16.0F);
+        panel->SetPaddingBottom(16.0F);
+        panel->SetPaddingLeft(16.0F);
+        panel->SetSpacing(10.0F);
         return panel;
     }
 
@@ -832,6 +1012,7 @@ private:
         statusAction_->SetText("status/action_ready"_i18n);
         treeTitle_->SetText("tree/title"_i18n);
         treeSubtitle_->SetText("tree/subtitle"_i18n);
+        treeSizeLabel_->SetText("Action Panel Scale");
         actionTitle_->SetText("action/title"_i18n);
         actionSubtitle_->SetText("action/subtitle"_i18n);
         cardOverview_->SetText("action/overview"_i18n);
@@ -1047,6 +1228,10 @@ private:
     std::shared_ptr<ActionButton> langEnButton_;
     std::shared_ptr<bk::VBox> rightColumn_;
     std::shared_ptr<bk::VBox> statusPanel_;
+    std::shared_ptr<bk::VBox> treeSizePanel_;
+    std::shared_ptr<bk::Label> treeSizeLabel_;
+    std::shared_ptr<bk::Label> treeSizeValueLabel_;
+    std::shared_ptr<SizeScrollbar> treeSizeScrollbar_;
     std::shared_ptr<bk::Label> statusTitle_;
     std::shared_ptr<bk::Label> statusFocus_;
     std::shared_ptr<bk::Label> statusDefault_;
@@ -1070,8 +1255,12 @@ private:
     std::shared_ptr<ActionButton> cardOpenModal_;
     std::shared_ptr<ActionButton> cardRestoreFocus_;
     std::string currentFocusThemeName_{"Aurora"};
+    float actionPanelScale_ = 1.0F;
     bool openModalRequested_ = false;
     bool wireframeEnabled_ = false;
+
+    static constexpr float kActionPanelMinScale = 0.75F;
+    static constexpr float kActionPanelMaxScale = 1.45F;
 };
 
 }

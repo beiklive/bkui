@@ -961,12 +961,12 @@ bk::Vector2 EnsureWindowSize(const bk::Vector2& size)
 
 int main(int argc, char** argv)
 {
-    try
-    {
-        bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
-        bk::FileSystem::Mount("resources");
+      try
+      {
+          bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
+          bk::FileSystem::MountDefaultResources();
 
-        auto platform = bk::CreateDefaultPlatform(bk::WindowDesc{
+          auto platform = bk::CreateDefaultPlatform(bk::WindowDesc{
             "BeikUI Main Loop Demo",
             1280,
             720,

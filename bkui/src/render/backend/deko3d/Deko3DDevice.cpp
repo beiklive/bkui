@@ -17,6 +17,7 @@ namespace
 {
 static constexpr std::uint32_t kFramebufferCount = 2;
 static constexpr std::uint32_t kStaticCmdSize = 0x20000;
+static constexpr std::uint32_t kUploadCmdSize = 0x10000;
 static constexpr std::uint32_t kImagePoolSize = 32 * 1024 * 1024;
 static constexpr std::uint32_t kCodePoolSize = 128 * 1024;
 static constexpr std::uint32_t kDataPoolSize = 16 * 1024 * 1024;
@@ -169,7 +170,12 @@ class Deko3DDevice final : public Device
 public:
     explicit Deko3DDevice(Platform& platform)
     {
-        (void)platform;
+        const Vector2 windowSize = platform.GetWindowSize();
+        if (windowSize.x > 0.0F && windowSize.y > 0.0F)
+        {
+            framebufferWidth_ = windowSize.x;
+            framebufferHeight_ = windowSize.y;
+        }
     }
 
     bool Init() override
@@ -189,6 +195,15 @@ public:
             return false;
         }
         cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+
+        uploadCmdBuf_ = dk::CmdBufMaker{device_}.create();
+        uploadCmdMem_ = dataPool_->allocate(kUploadCmdSize);
+        if (!uploadCmdMem_)
+        {
+            std::fprintf(stderr, "deko3d: failed to allocate upload command memory\n");
+            return false;
+        }
+        uploadCmdBuf_.addMemory(uploadCmdMem_.block, uploadCmdMem_.offset, uploadCmdMem_.size);
 
         textureDescriptorMemory_ = dataPool_->allocate(
             kTextureDescriptorCount * sizeof(DkImageDescriptor),
@@ -222,13 +237,30 @@ public:
         DestroyFramebufferResources();
 
         cmdBuf_.clear();
+        uploadCmdBuf_.clear();
 
     }
 
     void Resize(Vector2 size) override
     {
+        if (size.x <= 0.0F || size.y <= 0.0F)
+        {
+            return;
+        }
+
+        if (framebufferWidth_ == size.x && framebufferHeight_ == size.y)
+        {
+            return;
+        }
+
+        queue_.waitIdle();
+        DestroyFramebufferResources();
         framebufferWidth_ = static_cast<float>(size.x);
         framebufferHeight_ = static_cast<float>(size.y);
+        if (!CreateFramebufferResources())
+        {
+            std::fprintf(stderr, "failed to recreate Deko3D framebuffers after resize\n");
+        }
     }
 
     SwapchainHandle GetMainSwapchain() const override
@@ -306,27 +338,27 @@ public:
         sampler.setWrapMode(DkWrapMode_ClampToEdge, DkWrapMode_ClampToEdge);
         texture.samplerDescriptor.initialize(sampler);
 
-        cmdBuf_.pushData(
+        ResetUploadCommandBuffer();
+        uploadCmdBuf_.pushData(
             textureDescriptorMemory_.gpu + texture.imageDescriptorIndex * sizeof(DkImageDescriptor),
             &texture.imageDescriptor,
             sizeof(DkImageDescriptor)
         );
-        cmdBuf_.pushData(
+        uploadCmdBuf_.pushData(
             samplerDescriptorMemory_.gpu + texture.samplerDescriptorIndex * sizeof(DkSamplerDescriptor),
             &texture.samplerDescriptor,
             sizeof(DkSamplerDescriptor)
         );
-        cmdBuf_.barrier(DkBarrier_None, DkInvalidateFlags_Descriptors);
+        uploadCmdBuf_.barrier(DkBarrier_None, DkInvalidateFlags_Descriptors);
         dk::ImageView dstView{texture.image};
-        cmdBuf_.copyBufferToImage(
+        uploadCmdBuf_.copyBufferToImage(
             {texture.stagingMemory.gpu},
             dstView,
             {0, 0, 0, desc.width, desc.height, 1}
         );
-        queue_.submitCommands(cmdBuf_.finishList());
+        queue_.submitCommands(uploadCmdBuf_.finishList());
         queue_.waitIdle();
-        cmdBuf_.clear();
-        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        ResetUploadCommandBuffer();
 
         textures_.push_back(texture);
         return TextureHandle{static_cast<std::uint32_t>(textures_.size())};
@@ -343,18 +375,16 @@ public:
 
         std::memcpy(texture->stagingMemory.cpu, desc.rgba, static_cast<std::size_t>(desc.width) * desc.height * 4);
 
-        cmdBuf_.clear();
-        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        ResetUploadCommandBuffer();
         dk::ImageView dstView{texture->image};
-        cmdBuf_.copyBufferToImage(
+        uploadCmdBuf_.copyBufferToImage(
             {texture->stagingMemory.gpu},
             dstView,
             {0, 0, 0, desc.width, desc.height, 1}
         );
-        queue_.submitCommands(cmdBuf_.finishList());
+        queue_.submitCommands(uploadCmdBuf_.finishList());
         queue_.waitIdle();
-        cmdBuf_.clear();
-        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        ResetUploadCommandBuffer();
         return true;
     }
 
@@ -381,18 +411,16 @@ public:
             );
         }
 
-        cmdBuf_.clear();
-        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        ResetUploadCommandBuffer();
         dk::ImageView dstView{texture->image};
-        cmdBuf_.copyBufferToImage(
+        uploadCmdBuf_.copyBufferToImage(
             {texture->stagingMemory.gpu},
             dstView,
             {0, 0, 0, texture->width, texture->height, 1}
         );
-        queue_.submitCommands(cmdBuf_.finishList());
+        queue_.submitCommands(uploadCmdBuf_.finishList());
         queue_.waitIdle();
-        cmdBuf_.clear();
-        cmdBuf_.addMemory(cmdMem_.block, cmdMem_.offset, cmdMem_.size);
+        ResetUploadCommandBuffer();
         return true;
     }
 
@@ -618,6 +646,12 @@ public:
     }
 
 private:
+    void ResetUploadCommandBuffer()
+    {
+        uploadCmdBuf_.clear();
+        uploadCmdBuf_.addMemory(uploadCmdMem_.block, uploadCmdMem_.offset, uploadCmdMem_.size);
+    }
+
     static DkVtxAttribSize ToDkAttribSize(VertexFormat format)
     {
         switch (format)
@@ -751,11 +785,13 @@ private:
         }
         depthBufferMem_ = {};
         swapchain_.destroy();
+        currentFramebuffer_ = 0;
     }
 
     dk::Device device_{};
     dk::Queue queue_{};
     dk::UniqueCmdBuf cmdBuf_{};
+    dk::UniqueCmdBuf uploadCmdBuf_{};
     dk::UniqueSwapchain swapchain_{};
     std::optional<LinearPool> imagePool_;
     std::optional<LinearPool> codePool_;
@@ -770,6 +806,7 @@ private:
     dk::Image depthBuffer_{};
     LinearPool::Allocation depthBufferMem_{};
     LinearPool::Allocation cmdMem_{};
+    LinearPool::Allocation uploadCmdMem_{};
     LinearPool::Allocation textureDescriptorMemory_{};
     LinearPool::Allocation samplerDescriptorMemory_{};
     std::uint32_t nextTextureDescriptor_ = 0;

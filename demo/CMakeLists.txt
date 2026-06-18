@@ -60,7 +60,7 @@ if(BKUI_PLATFORM_SWITCH)
     add_custom_target(
         bkui_demo.nro
         ALL
-        DEPENDS bkui_demo bkui_perf_demo bkui_ui_tree_demo
+        DEPENDS bkui_demo
         COMMAND "${CMAKE_COMMAND}" -E remove_directory "${BKUI_SWITCH_ROMFS_DIR}"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/resources" "${BKUI_SWITCH_ROMFS_DIR}"
         COMMAND "${CMAKE_COMMAND}" -E remove_directory "${BKUI_SWITCH_ROMFS_DIR}/font"

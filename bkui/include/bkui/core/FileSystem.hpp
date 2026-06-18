@@ -15,6 +15,10 @@ public:
     static bool Init(const char* argv0 = nullptr);
     /// 关闭文件系统并释放相关状态。
     static void Shutdown();
+    /// 返回当前平台默认的资源根目录。
+    static std::string DefaultResourceRoot();
+    /// 挂载当前平台默认的资源根目录。
+    static bool MountDefaultResources();
     /// 挂载一个资源目录或资源包路径。
     static bool Mount(const std::string& path);
     /// 读取指定虚拟路径下的完整文件内容。

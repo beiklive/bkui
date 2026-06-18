@@ -275,6 +275,8 @@ private:
     [[nodiscard]] std::shared_ptr<View> FindFirstFocusableView() const;
     [[nodiscard]] static bool IsDirectionalKey(const InputState::KeyEvent& key, NavigationDirection direction);
     [[nodiscard]] static bool IsActivationKey(const InputState& input);
+    [[nodiscard]] Vector2 WindowToLogicalPoint(Vector2 point, Vector2 sourceWindowSize) const;
+    void NormalizeInputCoordinates();
 
     void ResetState();
     void StoreDescriptorMetaData();

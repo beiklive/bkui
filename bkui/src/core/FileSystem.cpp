@@ -42,6 +42,20 @@ void FileSystem::Shutdown()
     g_initialized = false;
 }
 
+std::string FileSystem::DefaultResourceRoot()
+{
+#if defined(BKUI_PLATFORM_SWITCH)
+    return "romfs:/";
+#else
+    return "resources";
+#endif
+}
+
+bool FileSystem::MountDefaultResources()
+{
+    return Mount(DefaultResourceRoot());
+}
+
 bool FileSystem::Mount(const std::string& path)
 {
 #if defined(BKUI_USE_PHYSFS)

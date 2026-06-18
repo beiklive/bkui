@@ -664,12 +664,12 @@ private:
 
 int main(int argc, char** argv)
 {
-    try
-    {
-        bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
-        bk::FileSystem::Mount("resources");
+      try
+      {
+          bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
+          bk::FileSystem::MountDefaultResources();
 
-        auto platform = bk::CreateDefaultPlatform(bk::WindowDesc{
+          auto platform = bk::CreateDefaultPlatform(bk::WindowDesc{
             "BeikUI Perf Demo",
             1280,
             720,

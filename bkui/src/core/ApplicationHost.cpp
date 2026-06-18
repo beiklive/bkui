@@ -3,7 +3,8 @@
 #include <bkui/core/Logger.hpp>
 #include <bkui/render/backend/deko3d/Deko3DDevice.hpp>
 #include <bkui/render/backend/opengl/OpenGLDevice.hpp>
-
+#include <bkui/core/FileSystem.hpp>
+#include <bkui/core/I18n.hpp>
 #include <chrono>
 #include <cstdio>
 #include <thread>
@@ -35,6 +36,17 @@ bool ApplicationHost::Initialize(const ApplicationHostDesc& desc, int argc, cons
         Shutdown();
         return false;
     }
+
+    // 初始化文件挂载系统
+    {
+        bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
+        bk::FileSystem::MountDefaultResources();
+    }
+    // 初始化国际化系统，自动获取系统语言并加载对应翻译文件
+    {
+        bk::I18n::Instance().Init("i18n");
+    }
+
 
     initialized_ = true;
     return true;

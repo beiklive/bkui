@@ -1184,11 +1184,11 @@ void DrawText(Image& dst, const FontResource& font, const std::u32string& text, 
 }
 int main(int argc, char** argv)
 {
-    try
-    {
-        bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
-        bk::FileSystem::Mount("resources");
-        bk::I18n::Instance().Init("i18n");
+      try
+      {
+          bk::FileSystem::Init(argc > 0 ? argv[0] : nullptr);
+          bk::FileSystem::MountDefaultResources();
+          bk::I18n::Instance().Init("i18n");
 
         auto platform = bk::CreateDefaultPlatform(bk::WindowDesc{
             "BeikUI Resource Demo",
