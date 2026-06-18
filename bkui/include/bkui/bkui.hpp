@@ -19,9 +19,13 @@
 #include <bkui/render/RenderQueueRenderer.hpp>
 #include <bkui/ui/Box.hpp>
 #include <bkui/ui/Button.hpp>
+#include <bkui/ui/CheckBox.hpp>
 #include <bkui/ui/Label.hpp>
 #include <bkui/ui/LogOverlayView.hpp>
+#include <bkui/ui/ProgressBar.hpp>
+#include <bkui/ui/ScrollGestureController.hpp>
 #include <bkui/ui/ScrollView.hpp>
+#include <bkui/ui/Slider.hpp>
 #include <bkui/ui/View.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION

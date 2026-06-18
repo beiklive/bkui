@@ -7,6 +7,8 @@
 #include <bkui/platform/Platform.hpp>
 #include <bkui/render/RenderQueue.hpp>
 #include <bkui/ui/LogOverlayView.hpp>
+#include <bkui/ui/ScrollGestureController.hpp>
+#include <bkui/ui/ScrollView.hpp>
 #include <bkui/ui/View.hpp>
 
 #include <cstddef>
@@ -280,6 +282,7 @@ private:
     void InvalidateViewOrderCache();
     [[nodiscard]] const std::vector<std::shared_ptr<View>>& OrderedViews(bool descending) const;
     [[nodiscard]] std::shared_ptr<View> FindTopmostViewAt(const Vector2& point) const;
+    [[nodiscard]] std::shared_ptr<ScrollView> FindTopmostScrollViewAt(const Vector2& point) const;
     [[nodiscard]] std::shared_ptr<View> FindFirstFocusableView() const;
     [[nodiscard]] static bool IsDirectionalKey(const InputState::KeyEvent& key, NavigationDirection direction);
     [[nodiscard]] static bool IsActivationKey(const InputState& input);
@@ -303,6 +306,8 @@ private:
     InputState inputState_{};
     std::weak_ptr<View> focusedView_{};
     std::weak_ptr<View> pressedView_{};
+    std::weak_ptr<ScrollView> scrollDragView_{};
+    ScrollGestureController scrollGestureController_{};
     FocusHighlightState focusHighlight_{};
     std::vector<FocusHighlightState> inactiveFocusHighlights_{};
     FocusHighlightStyle defaultFocusHighlightStyle_{};

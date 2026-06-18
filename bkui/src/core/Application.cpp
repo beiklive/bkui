@@ -189,6 +189,28 @@ std::shared_ptr<View> TopLevelAncestor(const std::shared_ptr<View>& view)
     return current;
 }
 
+bool IsViewInsideActiveScrollView(const std::shared_ptr<View>& view)
+{
+    if (!view)
+    {
+        return false;
+    }
+
+    std::shared_ptr<View> current = view;
+    while (current)
+    {
+        if (std::shared_ptr<ScrollView> scrollView = std::dynamic_pointer_cast<ScrollView>(current))
+        {
+            return scrollView->IsScrolling();
+        }
+
+        const View* parent = current->GetParent();
+        current = parent != nullptr ? std::const_pointer_cast<View>(parent->shared_from_this()) : nullptr;
+    }
+
+    return false;
+}
+
 std::shared_ptr<View> FindTopmostVisibleRoot(const std::vector<std::shared_ptr<View>>& views)
 {
     std::shared_ptr<View> topmost;
@@ -1021,13 +1043,64 @@ void Application::ProcessInput()
 
     const bool touchDown = inputState_.touchCount > 0 && inputState_.touchPoints[0].down;
     const bool touchPressed = inputState_.touchCount > 0 && inputState_.touchPoints[0].pressed;
-    const bool touchReleased = inputState_.touchCount > 0 && inputState_.touchPoints[0].released;
+    const bool touchReleased = inputState_.touchCount == 0 ||
+        (inputState_.touchCount > 0 && inputState_.touchPoints[0].released);
     const Vector2 pointerPosition = touchDown || touchPressed || touchReleased
-        ? inputState_.touchPoints[0].position
+        ? (inputState_.touchCount > 0 ? inputState_.touchPoints[0].position : inputState_.mousePosition)
         : inputState_.mousePosition;
+    const bool touchGestureActive = inputState_.touchCount > 0 && inputState_.touchCount <= 3 &&
+        (touchDown || touchPressed || inputState_.touchMoved);
+
+    if (inputState_.mouseWheel.x != 0.0F || inputState_.mouseWheel.y != 0.0F)
+    {
+        if (std::shared_ptr<ScrollView> scrollView = FindTopmostScrollViewAt(pointerPosition))
+        {
+            if (scrollView->ScrollByWheel(inputState_.mouseWheel))
+            {
+                return;
+            }
+        }
+    }
+
+    if (inputState_.mouseMoved)
+    {
+        if (std::shared_ptr<ScrollView> dragScrollView = scrollDragView_.lock())
+        {
+            if (dragScrollView->UpdateScrollBarDrag(pointerPosition))
+            {
+                return;
+            }
+        }
+    }
+
+    if (touchGestureActive)
+    {
+        if (!scrollGestureController_.IsTracking())
+        {
+            if (std::shared_ptr<ScrollView> scrollView = FindTopmostScrollViewAt(pointerPosition))
+            {
+                scrollGestureController_.Begin(scrollView, pointerPosition, inputState_.touchCount, true);
+            }
+        }
+        if (inputState_.touchMoved && scrollGestureController_.Update(pointerPosition, inputState_.touchCount, 1.0F / 60.0F))
+        {
+            return;
+        }
+    }
+    else if (scrollGestureController_.IsTracking())
+    {
+        if (scrollGestureController_.End())
+        {
+            return;
+        }
+    }
 
     if (inputState_.mouseMoved || inputState_.touchMoved)
     {
+        if (scrollGestureController_.IsTracking() && scrollGestureController_.Update(pointerPosition, inputState_.touchCount, 1.0F / 60.0F))
+        {
+            return;
+        }
         if (std::shared_ptr<View> hovered = FindTopmostViewAt(pointerPosition))
         {
             hovered->DispatchPointerMove(pointerPosition);
@@ -1036,6 +1109,15 @@ void Application::ProcessInput()
 
     if (inputState_.mouseLeftPressed || touchPressed)
     {
+        if (std::shared_ptr<ScrollView> scrollView = FindTopmostScrollViewAt(pointerPosition))
+        {
+            if (scrollView->BeginScrollBarDrag(pointerPosition))
+            {
+                scrollDragView_ = scrollView;
+                return;
+            }
+        }
+
         std::shared_ptr<View> target = FindTopmostViewAt(pointerPosition);
         pressedView_ = target;
         if (target)
@@ -1091,6 +1173,13 @@ void Application::ProcessInput()
 
     if (inputState_.mouseLeftReleased || touchReleased)
     {
+        if (std::shared_ptr<ScrollView> dragScrollView = scrollDragView_.lock())
+        {
+            dragScrollView->EndScrollBarDrag();
+            scrollDragView_.reset();
+            return;
+        }
+
         std::shared_ptr<View> releasedTarget = FindTopmostViewAt(pointerPosition);
         if (std::shared_ptr<View> pressedTarget = pressedView_.lock())
         {
@@ -1261,7 +1350,9 @@ void Application::UpdateFocusHighlightState(
 
 void Application::UpdateFocusHighlight(float deltaSeconds)
 {
-    UpdateFocusHighlightState(focusHighlight_, focusedView_.lock(), deltaSeconds, 1.0F);
+    const std::shared_ptr<View> focused = focusedView_.lock();
+    const float activeFocusOpacity = IsViewInsideActiveScrollView(focused) ? 0.0F : 1.0F;
+    UpdateFocusHighlightState(focusHighlight_, focused, deltaSeconds, activeFocusOpacity);
 
     if (!preserveInactiveFocusHighlights_)
     {
@@ -1282,7 +1373,8 @@ void Application::UpdateFocusHighlight(float deltaSeconds)
             continue;
         }
 
-        UpdateFocusHighlightState(state, trackedView, deltaSeconds, 1.0F);
+        const float inactiveOpacity = IsViewInsideActiveScrollView(trackedView) ? 0.0F : 1.0F;
+        UpdateFocusHighlightState(state, trackedView, deltaSeconds, inactiveOpacity);
         ++index;
     }
 }
@@ -1586,6 +1678,22 @@ std::shared_ptr<View> Application::FindTopmostViewAt(const Vector2& point) const
         }
     }
 
+    return nullptr;
+}
+
+std::shared_ptr<ScrollView> Application::FindTopmostScrollViewAt(const Vector2& point) const
+{
+    std::shared_ptr<View> hit = FindTopmostViewAt(point);
+    while (hit)
+    {
+        if (std::shared_ptr<ScrollView> scrollView = std::dynamic_pointer_cast<ScrollView>(hit))
+        {
+            return scrollView;
+        }
+
+        const View* parent = hit->GetParent();
+        hit = parent != nullptr ? std::const_pointer_cast<View>(parent->shared_from_this()) : nullptr;
+    }
     return nullptr;
 }
 
