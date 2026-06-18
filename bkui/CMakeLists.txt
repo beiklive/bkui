@@ -74,7 +74,12 @@ target_compile_definitions(
     bkui
     PUBLIC
         $<$<BOOL:${BKUI_PLATFORM_SWITCH}>:BKUI_PLATFORM_SWITCH=1>
+        $<$<BOOL:${BKUI_PLATFORM_MACOS}>:BKUI_PLATFORM_MACOS=1>
 )
+
+if(APPLE)
+    target_compile_definitions(bkui PRIVATE GL_SILENCE_DEPRECATION)
+endif()
 
 if(BKUI_PLATFORM_SWITCH)
     target_include_directories(bkui PRIVATE "$ENV{DEVKITPRO}/libnx/include")
