@@ -20,6 +20,7 @@
 #include <bkui/ui/Box.hpp>
 #include <bkui/ui/Button.hpp>
 #include <bkui/ui/Label.hpp>
+#include <bkui/ui/LogOverlayView.hpp>
 #include <bkui/ui/ScrollView.hpp>
 #include <bkui/ui/View.hpp>
 

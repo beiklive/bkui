@@ -6,6 +6,7 @@
 #include <bkui/core/Singleton.hpp>
 #include <bkui/platform/Platform.hpp>
 #include <bkui/render/RenderQueue.hpp>
+#include <bkui/ui/LogOverlayView.hpp>
 #include <bkui/ui/View.hpp>
 
 #include <cstddef>
@@ -92,6 +93,13 @@ public:
 
     /// 获取全部顶层页面视图。
     [[nodiscard]] const std::vector<std::shared_ptr<View>>& GetViews() const;
+
+    /// 设置日志调试覆盖层是否显示。
+    void SetLogOverlayVisible(bool visible);
+    /// 查询日志调试覆盖层当前是否显示。
+    [[nodiscard]] bool IsLogOverlayVisible() const;
+    /// 获取应用内建日志调试覆盖层实例。
+    [[nodiscard]] std::shared_ptr<LogOverlayView> GetLogOverlayView() const;
 
     /// 获取当前帧渲染命令队列。
     [[nodiscard]] RenderQueue& GetRenderQueue();
@@ -285,6 +293,8 @@ private:
     ApplicationDesc descriptor_{};
     std::vector<std::string> arguments_{};
     std::vector<std::shared_ptr<View>> views_{};
+    std::shared_ptr<LogOverlayView> logOverlayView_{};
+    bool logOverlayVisible_ = false;
     mutable bool viewOrderCacheDirty_ = true;
     mutable std::vector<std::shared_ptr<View>> orderedViewsAscendingCache_{};
     mutable std::vector<std::shared_ptr<View>> orderedViewsDescendingCache_{};

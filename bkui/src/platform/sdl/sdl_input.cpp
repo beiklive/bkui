@@ -5,18 +5,21 @@
 #include <SDL3/SDL_touch.h>
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 
 namespace bk::sdl
 {
 namespace
 {
-struct PrimaryTouchState
+struct TrackedTouchState
 {
     std::int64_t id = -1;
     Vector2 position{};
     bool down = false;
 };
+
+using TouchStateArray = std::array<TrackedTouchState, InputState::MaxTouchPoints>;
 
 void CopyCString(char* dst, std::size_t dstSize, const char* src)
 {
@@ -80,28 +83,54 @@ void RemoveKeyDown(InputState& input, SDL_Scancode scancode)
     }
 }
 
+int FindTouchById(const TouchStateArray& touches, std::size_t count, std::int64_t id)
+{
+    for (std::size_t index = 0; index < count && index < touches.size(); ++index)
+    {
+        if (touches[index].down && touches[index].id == id)
+        {
+            return static_cast<int>(index);
+        }
+    }
+
+    return -1;
+}
+
 void FillTouchPoints(SDL_Window* window, InputState& input)
 {
-    static PrimaryTouchState previousPrimary{};
+    static TouchStateArray previousTouches{};
+    static std::size_t previousTouchCount = 0;
 
     (void)window;
+    TouchStateArray currentTouches{};
+    std::size_t currentTouchCount = 0;
+    bool touchChanged = false;
+
     int deviceCount = 0;
     SDL_TouchID* devices = SDL_GetTouchDevices(&deviceCount);
     if (devices == nullptr || deviceCount <= 0)
     {
-        if (previousPrimary.down)
+        for (std::size_t index = 0; index < previousTouchCount && input.touchCount < input.touchPoints.size(); ++index)
         {
-            input.touchCount = 1;
-            input.touchPoints[0].id = previousPrimary.id;
-            input.touchPoints[0].position = previousPrimary.position;
-            input.touchPoints[0].released = true;
-            previousPrimary = {};
+            const auto& previous = previousTouches[index];
+            if (!previous.down)
+            {
+                continue;
+            }
+
+            auto& touch = input.touchPoints[input.touchCount++];
+            touch.id = previous.id;
+            touch.position = previous.position;
+            touch.released = true;
         }
+        input.touchMoved = input.touchMoved || input.touchCount > 0;
+        previousTouches = {};
+        previousTouchCount = 0;
         return;
     }
 
     const Vector2 windowSize = input.windowSize;
-    for (int deviceIndex = 0; deviceIndex < deviceCount && input.touchCount < input.touchPoints.size(); ++deviceIndex)
+    for (int deviceIndex = 0; deviceIndex < deviceCount && currentTouchCount < currentTouches.size(); ++deviceIndex)
     {
         int fingerCount = 0;
         SDL_Finger** fingers = SDL_GetTouchFingers(devices[deviceIndex], &fingerCount);
@@ -110,7 +139,7 @@ void FillTouchPoints(SDL_Window* window, InputState& input)
             continue;
         }
 
-        for (int fingerIndex = 0; fingerIndex < fingerCount && input.touchCount < input.touchPoints.size(); ++fingerIndex)
+        for (int fingerIndex = 0; fingerIndex < fingerCount && currentTouchCount < currentTouches.size(); ++fingerIndex)
         {
             SDL_Finger* finger = fingers[fingerIndex];
             if (finger == nullptr)
@@ -118,7 +147,7 @@ void FillTouchPoints(SDL_Window* window, InputState& input)
                 continue;
             }
 
-            auto& touch = input.touchPoints[input.touchCount++];
+            auto& touch = currentTouches[currentTouchCount++];
             touch.id = static_cast<std::int64_t>(finger->id);
             touch.position = Vector2{
                 finger->x * windowSize.x,
@@ -132,24 +161,48 @@ void FillTouchPoints(SDL_Window* window, InputState& input)
 
     SDL_free(devices);
 
-    if (input.touchCount > 0)
+    for (std::size_t index = 0; index < currentTouchCount && input.touchCount < input.touchPoints.size(); ++index)
     {
-        auto& primary = input.touchPoints[0];
-        primary.pressed = !previousPrimary.down || previousPrimary.id != primary.id;
-        previousPrimary = PrimaryTouchState{
-            primary.id,
-            primary.position,
-            true,
-        };
+        const auto& current = currentTouches[index];
+        const int previousIndex = FindTouchById(previousTouches, previousTouchCount, current.id);
+        auto& touch = input.touchPoints[input.touchCount++];
+        touch.id = current.id;
+        touch.position = current.position;
+        touch.down = true;
+        touch.pressed = previousIndex < 0;
+
+        if (touch.pressed)
+        {
+            touchChanged = true;
+        }
+        else
+        {
+            const Vector2 previousPosition = previousTouches[static_cast<std::size_t>(previousIndex)].position;
+            if (previousPosition.x != current.position.x || previousPosition.y != current.position.y)
+            {
+                touchChanged = true;
+            }
+        }
     }
-    else if (previousPrimary.down)
+
+    for (std::size_t previousIndex = 0; previousIndex < previousTouchCount && input.touchCount < input.touchPoints.size(); ++previousIndex)
     {
-        input.touchCount = 1;
-        input.touchPoints[0].id = previousPrimary.id;
-        input.touchPoints[0].position = previousPrimary.position;
-        input.touchPoints[0].released = true;
-        previousPrimary = {};
+        const auto& previous = previousTouches[previousIndex];
+        if (!previous.down || FindTouchById(currentTouches, currentTouchCount, previous.id) >= 0)
+        {
+            continue;
+        }
+
+        auto& touch = input.touchPoints[input.touchCount++];
+        touch.id = previous.id;
+        touch.position = previous.position;
+        touch.released = true;
+        touchChanged = true;
     }
+
+    input.touchMoved = input.touchMoved || touchChanged;
+    previousTouches = currentTouches;
+    previousTouchCount = currentTouchCount;
 }
 }
 

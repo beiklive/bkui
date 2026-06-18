@@ -3,9 +3,12 @@
 #include <bkui/core/Singleton.hpp>
 
 #include <cstdio>
+#include <deque>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace bk
 {
@@ -32,10 +35,20 @@ struct LoggerDesc
     std::string filePath;
 };
 
+struct LogEntry
+{
+    LogLevel level = LogLevel::Info;
+    std::string prefix;
+    std::string message;
+};
+
 /// 轻量日志模块，提供彩色控制台输出与文件写入。
 class Logger : public Singleton<Logger>
 {
 public:
+    using ListenerId = std::size_t;
+    using LogListener = std::function<void(const LogEntry&)>;
+
     Logger();
     ~Logger();
 
@@ -86,6 +99,17 @@ public:
     /// 立刻刷新控制台和文件缓冲。
     void Flush();
 
+    /// 设置内存日志缓存上限。
+    void SetHistoryLimit(std::size_t limit);
+    /// 获取内存日志缓存上限。
+    [[nodiscard]] std::size_t GetHistoryLimit() const;
+    /// 获取当前缓存的日志快照。
+    [[nodiscard]] std::vector<LogEntry> GetHistorySnapshot() const;
+    /// 注册日志监听器，返回可用于注销的 id。
+    ListenerId AddListener(LogListener listener);
+    /// 注销已注册日志监听器。
+    void RemoveListener(ListenerId listenerId);
+
 private:
     [[nodiscard]] static const char* LevelName(LogLevel level);
     [[nodiscard]] static const char* LevelColor(LogLevel level);
@@ -97,6 +121,10 @@ private:
 
     mutable std::mutex mutex_{};
     LoggerDesc desc_{};
+    std::deque<LogEntry> history_{};
+    std::vector<std::pair<ListenerId, LogListener>> listeners_{};
+    std::size_t historyLimit_ = 256;
+    ListenerId nextListenerId_ = 1;
     std::FILE* file_ = nullptr;
     bool initialized_ = false;
 };
@@ -106,4 +134,3 @@ private:
 }
 
 #define bklog bk::Logger::instance()
-

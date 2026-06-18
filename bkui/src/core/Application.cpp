@@ -391,6 +391,13 @@ bool Application::Initialize(const ApplicationDesc& desc, int argc, const char* 
         return false;
     }
 
+    logOverlayView_ = std::make_shared<LogOverlayView>();
+    logOverlayView_->SetName("ApplicationLogOverlay");
+    logOverlayView_->SetZIndex(100000);
+    logOverlayView_->SetVisible(false);
+    logOverlayVisible_ = false;
+    bklog.debug("Application log overlay prepared.");
+
     initialized_ = true;
     running_ = true;
     quitRequested_ = false;
@@ -423,6 +430,7 @@ void Application::RequestQuit()
 
     quitRequested_ = true;
     running_ = false;
+    bklog.info("Application quit requested.");
     onQuitRequested_.Emit(*this);
 }
 
@@ -487,6 +495,11 @@ void Application::RemoveView(const std::shared_ptr<View>& view)
 
 void Application::ClearViews()
 {
+    if (logOverlayView_)
+    {
+        logOverlayView_->SetVisible(false);
+    }
+    logOverlayVisible_ = false;
     views_.clear();
     inactiveFocusHighlights_.clear();
     InvalidateViewOrderCache();
@@ -495,6 +508,54 @@ void Application::ClearViews()
 const std::vector<std::shared_ptr<View>>& Application::GetViews() const
 {
     return views_;
+}
+
+void Application::SetLogOverlayVisible(bool visible)
+{
+    if (!logOverlayView_)
+    {
+        logOverlayVisible_ = false;
+        return;
+    }
+
+    if (logOverlayVisible_ == visible)
+    {
+        return;
+    }
+
+    logOverlayVisible_ = visible;
+    logOverlayView_->SetVisible(visible);
+
+    const auto it = std::find(views_.begin(), views_.end(), logOverlayView_);
+    if (visible)
+    {
+        if (it == views_.end())
+        {
+            views_.push_back(logOverlayView_);
+        }
+        logOverlayView_->SetWidth(520.0F);
+        logOverlayView_->SetHeight(320.0F);
+        logOverlayView_->SetMargin(16.0F, 16.0F, 0.0F, 0.0F);
+        logOverlayView_->SetPadding(12.0F);
+    }
+    else if (it != views_.end())
+    {
+        views_.erase(it);
+    }
+
+    ApplyRootViewFrames();
+    InvalidateViewOrderCache();
+    bklog.info(std::string("Application log overlay ") + (visible ? "shown." : "hidden."));
+}
+
+bool Application::IsLogOverlayVisible() const
+{
+    return logOverlayVisible_;
+}
+
+std::shared_ptr<LogOverlayView> Application::GetLogOverlayView() const
+{
+    return logOverlayView_;
 }
 
 RenderQueue& Application::GetRenderQueue()
@@ -901,6 +962,11 @@ void Application::SetWindowSize(Vector2 size)
 
     windowSize_ = resolved;
     ApplyRootViewFrames();
+    bklog.debug(
+        "Application window size set to " +
+        std::to_string(static_cast<int>(windowSize_.x)) +
+        "x" +
+        std::to_string(static_cast<int>(windowSize_.y)) + ".");
     onResize_.Emit(*this, windowSize_);
 }
 
@@ -913,6 +979,12 @@ void Application::SetLogicalSize(Vector2 size)
 {
     logicalSize_ = size;
     ApplyRootViewFrames();
+    const Vector2 resolved = GetLogicalSize();
+    bklog.debug(
+        "Application logical size set to " +
+        std::to_string(static_cast<int>(resolved.x)) +
+        "x" +
+        std::to_string(static_cast<int>(resolved.y)) + ".");
 }
 
 Vector2 Application::GetLogicalSize() const
@@ -942,6 +1014,11 @@ Application::ResizeEvent& Application::OnResize()
 
 void Application::ProcessInput()
 {
+    auto isLogOverlayToggleKey = [&]() {
+        return std::strcmp(inputState_.lastKeyEvent.name, "F1") == 0 ||
+            std::strcmp(inputState_.lastKeyEvent.name, "Minus") == 0;
+    };
+
     const bool touchDown = inputState_.touchCount > 0 && inputState_.touchPoints[0].down;
     const bool touchPressed = inputState_.touchCount > 0 && inputState_.touchPoints[0].pressed;
     const bool touchReleased = inputState_.touchCount > 0 && inputState_.touchPoints[0].released;
@@ -973,7 +1050,11 @@ void Application::ProcessInput()
 
     if (inputState_.keyPressed)
     {
-        if (IsDirectionalKey(inputState_.lastKeyEvent, NavigationDirection::Up))
+        if (isLogOverlayToggleKey())
+        {
+            SetLogOverlayVisible(!IsLogOverlayVisible());
+        }
+        else if (IsDirectionalKey(inputState_.lastKeyEvent, NavigationDirection::Up))
         {
             MoveFocus(NavigationDirection::Up);
         }
@@ -1091,6 +1172,16 @@ void Application::ApplyRootViewFrames()
     {
         if (view)
         {
+            if (logOverlayView_ && view == logOverlayView_)
+            {
+                view->SetFrame(Rect{
+                    16.0F,
+                    16.0F,
+                    std::min(520.0F, size.x - 32.0F),
+                    std::min(320.0F, size.y - 32.0F),
+                });
+                continue;
+            }
             view->SetFrame(Rect{0.0F, 0.0F, size.x, size.y});
         }
     }
@@ -1621,6 +1712,8 @@ void Application::ResetState()
     descriptor_ = ApplicationDesc{};
     arguments_.clear();
     views_.clear();
+    logOverlayView_.reset();
+    logOverlayVisible_ = false;
     orderedViewsAscendingCache_.clear();
     orderedViewsDescendingCache_.clear();
     viewOrderCacheDirty_ = true;

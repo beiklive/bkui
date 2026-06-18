@@ -2,1285 +2,1307 @@
 
 #include "demo_support.cpp"
 
+#if !defined(BKUI_PLATFORM_SWITCH)
+#include <SDL3/SDL_opengl.h>
+#include <SDL3/SDL_video.h>
+#else
+#include <bkui/render/backend/deko3d/Deko3DDevice.hpp>
+#endif
+
+#if defined(DrawText)
+#undef DrawText
+#endif
+
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <sstream>
 #include <string>
-#include <utility>
-#include <vector>
-
 
 namespace
 {
-// 这个 demo 直接使用 i18n 字面量后缀，方便在构建控件时写出
-// "key"_i18n 形式的本地化文本。
-BK_MACRO_USE_I18N
-
-// Demo 的逻辑设计尺寸。窗口真实尺寸会在 resize 时同步到页面，
-// 但控件布局仍以这套 1280x720 的逻辑坐标为基准。
 constexpr float kDesignWidth = 1280.0F;
 constexpr float kDesignHeight = 720.0F;
+constexpr std::size_t kMaxPulseCount = 64;
+constexpr float kPulseLifetimeSeconds = 1.0F;
+constexpr int kGridColumns = 45;
+constexpr int kGridRows = 25;
+constexpr int kSwitchTextureWidth = 1280;
+constexpr int kSwitchTextureHeight = 720;
 
-// 将 View 指针转换成适合显示在状态面板里的名字：
-// 空指针显示 None，未命名节点显示 Unnamed。
-std::string DisplayName(const std::shared_ptr<bk::View>& view)
+struct Float3
 {
-    if (!view)
-    {
-        return "None";
-    }
+    float r = 0.0F;
+    float g = 0.0F;
+    float b = 0.0F;
+};
 
-    return view->GetName().empty() ? "Unnamed" : view->GetName();
+struct Pulse
+{
+    float x = 0.5F;
+    float y = 0.5F;
+    float age = kPulseLifetimeSeconds;
+    float strength = 0.0F;
+};
+
+float Fract(float value)
+{
+    return value - std::floor(value);
 }
 
-std::string DisplayName(const bk::View* view)
+float Clamp01(float value)
 {
-    if (view == nullptr)
-    {
-        return "None";
-    }
-
-    return view->GetName().empty() ? "Unnamed" : view->GetName();
+    return std::clamp(value, 0.0F, 1.0F);
 }
 
-// 递归开关整棵 View 树的调试线框。线框状态不只作用在根节点，
-// 子控件也需要同步，否则只会看到外层容器的边界。
-void SetDebugWireframeRecursive(const std::shared_ptr<bk::View>& view, bool enabled)
+Float3 Scale(const Float3& color, float factor)
 {
-    if (!view)
+    return Float3{
+        color.r * factor,
+        color.g * factor,
+        color.b * factor,
+    };
+}
+
+Float3 Mix(const Float3& a, const Float3& b, float t)
+{
+    const float clamped = Clamp01(t);
+    return Float3{
+        a.r + (b.r - a.r) * clamped,
+        a.g + (b.g - a.g) * clamped,
+        a.b + (b.b - a.b) * clamped,
+    };
+}
+
+Float3 ToneMap(const Float3& color)
+{
+    return Float3{
+        color.r / (1.0F + color.r * 0.35F),
+        color.g / (1.0F + color.g * 0.35F),
+        color.b / (1.0F + color.b * 0.35F),
+    };
+}
+
+float Hash12(float x, float y)
+{
+    float p3x = Fract(x * 0.1031F);
+    float p3y = Fract(y * 0.1031F);
+    float p3z = Fract(x * 0.1031F);
+    const float sum = p3x * (p3y + 33.33F) + p3y * (p3z + 33.33F) + p3z * (p3x + 33.33F);
+    p3x += sum;
+    p3y += sum;
+    p3z += sum;
+    return Fract((p3x + p3y) * p3z);
+}
+
+Float3 Palette(float t)
+{
+    constexpr float tau = 6.28318F;
+    return Float3{
+        0.5F + 0.5F * std::cos(tau * (t + 0.00F)),
+        0.5F + 0.5F * std::cos(tau * (t + 0.19F)),
+        0.5F + 0.5F * std::cos(tau * (t + 0.41F)),
+    };
+}
+
+Float3 RegionColor(float cellX, float cellY)
+{
+    const float regionX = std::floor(cellX / 4.0F);
+    const float regionY = std::floor(cellY / 3.0F);
+    const float regionSeed = Hash12(regionX + 1.37F, regionY + 4.91F);
+    const float localSeed = Hash12(cellX * 0.37F + 8.12F, cellY * 0.37F + 2.45F);
+    const float hue = Fract(regionSeed * 0.77F + localSeed * 0.33F);
+    const Float3 tint = Palette(hue);
+    return Mix(Float3{0.28F, 0.72F, 1.00F}, tint, 0.75F);
+}
+
+float ComputePulseGlow(float cellU, float cellV, float aspectX, const std::array<Pulse, kMaxPulseCount>& pulses)
+{
+    const float cellCenterX = (cellU - 0.5F) * aspectX;
+    const float cellCenterY = cellV - 0.5F;
+
+    float pulseGlow = 0.0F;
+    for (const Pulse& pulse : pulses)
     {
-        return;
+        if (pulse.strength <= 0.0F)
+        {
+            continue;
+        }
+
+        const float progress = Clamp01(pulse.age / kPulseLifetimeSeconds);
+        const float life = 1.0F - progress;
+        const float pulseCenterX = (pulse.x - 0.5F) * aspectX;
+        const float pulseCenterY = pulse.y - 0.5F;
+        const float dx = cellCenterX - pulseCenterX;
+        const float dy = cellCenterY - pulseCenterY;
+        const float dist = std::sqrt(dx * dx + dy * dy);
+
+        const float radius = 0.78F * progress;
+        const float band = 0.018F + (0.050F - 0.018F) * progress;
+        const float invBand = 1.0F / std::max(band, 0.0001F);
+        const float ring = std::exp(-std::pow((dist - radius) * invBand, 2.0F) * 10.0F);
+        const float haloBand = std::max(band * 1.9F, 0.0001F);
+        const float halo = std::exp(-std::pow((dist - radius * 0.72F) / haloBand, 2.0F) * 3.0F) * 0.30F;
+        const float core = std::exp(-dist * 20.0F) * std::exp(-progress * 12.0F) * 0.55F;
+        const float fade = life * life;
+
+        pulseGlow += (ring + halo + core) * fade * pulse.strength;
     }
 
-    view->SetDebugWireframeEnabled(enabled);
-    for (const auto& child : view->Children())
+    return std::min(pulseGlow, 1.8F);
+}
+
+std::string BoolText(bool value)
+{
+    return value ? "Y" : "N";
+}
+
+std::string BuildTouchDebugText(const bk::InputState& input, bk::Vector2 logicalSize)
+{
+    std::ostringstream stream;
+    stream << "touchCount=" << input.touchCount
+           << " moved=" << BoolText(input.touchMoved);
+
+    if (logicalSize.x > 0.0F && logicalSize.y > 0.0F)
     {
-        SetDebugWireframeRecursive(child, enabled);
+        stream << "  logical=" << static_cast<int>(logicalSize.x)
+               << "x" << static_cast<int>(logicalSize.y);
+    }
+
+    for (std::size_t index = 0; index < input.touchCount && index < input.touchPoints.size(); ++index)
+    {
+        const auto& touch = input.touchPoints[index];
+        stream << "\n#"
+               << index
+               << " id=" << touch.id
+               << " d=" << BoolText(touch.down)
+               << " p=" << BoolText(touch.pressed)
+               << " r=" << BoolText(touch.released)
+               << " x=" << static_cast<int>(std::round(touch.position.x))
+               << " y=" << static_cast<int>(std::round(touch.position.y));
+    }
+
+    if (input.touchCount == 0)
+    {
+        stream << "\nno active touches";
+    }
+
+    return stream.str();
+}
+
+void DrawMultilineText(
+    demo::Image& image,
+    const std::string& text,
+    int x,
+    int y,
+    float pixelHeight,
+    std::uint8_t r,
+    std::uint8_t g,
+    std::uint8_t b)
+{
+    std::size_t start = 0;
+    int line = 0;
+    while (start <= text.size())
+    {
+        const std::size_t end = text.find('\n', start);
+        const std::string lineText = end == std::string::npos
+            ? text.substr(start)
+            : text.substr(start, end - start);
+        auto drawTextFn = &demo::DrawText;
+        drawTextFn(
+            image,
+            demo::GlobalFont(),
+            demo::Utf8ToUtf32(lineText),
+            x,
+            y + static_cast<int>(std::round(line * (pixelHeight + 6.0F))),
+            pixelHeight,
+            r,
+            g,
+            b,
+            nullptr);
+        if (end == std::string::npos)
+        {
+            break;
+        }
+        start = end + 1;
+        ++line;
     }
 }
 
-// 带标题和副标题的 demo 按钮。
-// bk::Button 默认只绘制主文本，这里覆写 Draw 额外绘制说明文本，
-// 并通过 callback_ 把点击事件交给页面或模态框处理。
-class ActionButton : public bk::Button
+std::array<float, 24> BuildOverlayQuad(float x, float y, float width, float height, bk::Vector2 windowSize)
+{
+    const float left = (x / windowSize.x) * 2.0F - 1.0F;
+    const float right = ((x + width) / windowSize.x) * 2.0F - 1.0F;
+    const float top = 1.0F - (y / windowSize.y) * 2.0F;
+    const float bottom = 1.0F - ((y + height) / windowSize.y) * 2.0F;
+
+    return {{
+        left,  top,    0.0F, 0.0F,
+        left,  bottom, 0.0F, 1.0F,
+        right, bottom, 1.0F, 1.0F,
+        left,  top,    0.0F, 0.0F,
+        right, bottom, 1.0F, 1.0F,
+        right, top,    1.0F, 0.0F,
+    }};
+}
+
+class PulseTrailState
 {
 public:
-    using Callback = std::function<void(ActionButton&)>;
-
-    ActionButton(std::string title, std::string subtitle)
-        : bk::Button(std::move(title))
-        , subtitle_(std::move(subtitle))
+    void Update(const bk::InputState& input, bk::Vector2 logicalSize, float deltaSeconds)
     {
-        // 统一按钮外观：稍微收紧尺寸，让窗口重排后密度更舒服。
-        SetPadding(11.0F);
-        SetMinHeight(74.0F);
-        SetCornerRadius(14.0F);
-        SetShadowEnabled(true);
-        SetShadowOffset(0.0F, 6.0F);
-        SetShadowBlurRadius(12.0F);
-        SetShadowSpread(2.0F);
-        SetShadowColor(bk::ColorRGBA{0.0F, 0.0F, 0.0F, 0.18F});
+        UpdatePulses(deltaSeconds);
+        UpdatePointerTrail(input, logicalSize);
     }
 
-    void SetSubtitle(std::string subtitle)
+    const std::array<Pulse, kMaxPulseCount>& Pulses() const
     {
-        // 副标题变化会影响绘制内容，通知布局系统后续重新计算。
-        subtitle_ = std::move(subtitle);
-        InvalidateLayout();
-    }
-
-    void SetCallback(Callback callback)
-    {
-        callback_ = std::move(callback);
-    }
-
-    void Draw(bk::RenderQueue& queue) const override
-    {
-        // 先复用 Box/Button 的背景、圆角、阴影等基础绘制。
-        bk::Box::Draw(queue);
-
-        // 主标题放在上方，副标题占据下方剩余内容区。
-        const bk::Rect content = GetContentFrame();
-        queue.PushText(
-            bk::Rect{content.x, content.y, content.width, 24.0F},
-            GetText(),
-            18.0F,
-            GetTextColor());
-        queue.PushText(
-            bk::Rect{content.x, content.y + 28.0F, content.width, std::max(0.0F, content.height - 28.0F)},
-            subtitle_,
-            13.0F,
-            bk::ColorRGBA{0.86F, 0.90F, 0.96F, 1.0F});
-    }
-
-protected:
-    void Click(const bk::Vector2&) override
-    {
-        // 点击位置由框架完成命中测试；进入这里说明按钮已被点击。
-        if (callback_)
-        {
-            callback_(*this);
-        }
+        return pulses_;
     }
 
 private:
-    std::string subtitle_;
-    Callback callback_{};
-};
-
-class SizeScrollbar final : public bk::View
-{
-public:
-    using Callback = std::function<void(float)>;
-
-    SizeScrollbar()
+    struct TouchTracker
     {
-        SetName("SizeScrollbar");
-        SetFocusable(true);
-        SetMinHeight(34.0F);
-        SetFocusHighlightCornerRadius(18.0F);
-    }
+        std::int64_t id = -1;
+        bool active = false;
+        bk::Vector2 lastPointer{};
+    };
 
-    void SetRange(float minimum, float maximum)
+    void UpdatePulses(float deltaSeconds)
     {
-        minValue_ = std::min(minimum, maximum);
-        maxValue_ = std::max(minimum, maximum);
-        SetValue(value_);
-    }
-
-    void SetValue(float value)
-    {
-        const float clamped = std::clamp(value, minValue_, maxValue_);
-        if (value_ == clamped)
+        for (Pulse& pulse : pulses_)
         {
+            if (pulse.strength <= 0.0F)
+            {
+                continue;
+            }
+
+            pulse.age += deltaSeconds;
+            if (pulse.age >= kPulseLifetimeSeconds)
+            {
+                pulse.age = kPulseLifetimeSeconds;
+                pulse.strength = 0.0F;
+            }
+        }
+    }
+
+    void UpdatePointerTrail(const bk::InputState& input, bk::Vector2 logicalSize)
+    {
+        if (logicalSize.x <= 0.0F || logicalSize.y <= 0.0F)
+        {
+            mouseTracked_ = false;
+            ResetTouchTrackers();
             return;
         }
 
-        value_ = clamped;
-        InvalidateLayout();
+        UpdateTouchTrails(input, logicalSize);
+        UpdateMouseTrail(input, logicalSize);
     }
 
-    [[nodiscard]] float GetValue() const
+    void UpdateTouchTrails(const bk::InputState& input, bk::Vector2 logicalSize)
     {
-        return value_;
+        std::array<bool, bk::InputState::MaxTouchPoints> seen{};
+
+        for (std::size_t index = 0; index < input.touchCount && index < input.touchPoints.size(); ++index)
+        {
+            const auto& touch = input.touchPoints[index];
+            if (!touch.down && !touch.pressed)
+            {
+                continue;
+            }
+
+            const int trackerIndex = GetOrCreateTouchTracker(touch.id);
+            if (trackerIndex < 0)
+            {
+                continue;
+            }
+
+            seen[static_cast<std::size_t>(trackerIndex)] = true;
+            const bk::Vector2 current{
+                Clamp01(touch.position.x / logicalSize.x),
+                Clamp01(touch.position.y / logicalSize.y),
+            };
+            TouchTracker& tracker = touchTrackers_[static_cast<std::size_t>(trackerIndex)];
+
+            if (!tracker.active)
+            {
+                EmitPulse(current.x, current.y, 1.0F);
+                tracker.active = true;
+                tracker.id = touch.id;
+                tracker.lastPointer = current;
+                continue;
+            }
+
+            if (DistanceSquared(tracker.lastPointer, current) > kMinPointerStepSquared)
+            {
+                EmitTrailSegment(tracker.lastPointer, current, 1.0F);
+                tracker.lastPointer = current;
+            }
+        }
+
+        for (std::size_t index = 0; index < touchTrackers_.size(); ++index)
+        {
+            if (!seen[index])
+            {
+                touchTrackers_[index] = {};
+            }
+        }
     }
 
-    void SetCallback(Callback callback)
+    void UpdateMouseTrail(const bk::InputState& input, bk::Vector2 logicalSize)
     {
-        callback_ = std::move(callback);
-    }
+        const bool mouseActive = input.mouseMoved || input.mouseLeftDown || input.mouseLeftPressed;
+        if (!mouseActive)
+        {
+            mouseTracked_ = false;
+            return;
+        }
 
-    bk::Size Measure(const bk::Size& available) const override
-    {
-        return bk::Size{
-            std::max(180.0F, std::min(available.width, 320.0F)),
-            34.0F,
+        const bk::Vector2 current{
+            Clamp01(input.mousePosition.x / logicalSize.x),
+            Clamp01(input.mousePosition.y / logicalSize.y),
         };
+        const float strength = input.mouseLeftDown ? 1.0F : 0.78F;
+
+        if (!mouseTracked_)
+        {
+            EmitPulse(current.x, current.y, strength);
+            mouseTracked_ = true;
+            lastMousePointer_ = current;
+            return;
+        }
+
+        if (DistanceSquared(lastMousePointer_, current) > kMinPointerStepSquared)
+        {
+            EmitTrailSegment(lastMousePointer_, current, strength);
+            lastMousePointer_ = current;
+        }
     }
 
-protected:
-    void Draw(bk::RenderQueue& queue) const override
+    int GetOrCreateTouchTracker(std::int64_t id)
     {
-        const bk::Rect content = GetContentFrame();
-        const bk::Rect track{
-            content.x,
-            content.y + (content.height - 8.0F) * 0.5F,
-            content.width,
-            8.0F,
+        for (std::size_t index = 0; index < touchTrackers_.size(); ++index)
+        {
+            if (touchTrackers_[index].active && touchTrackers_[index].id == id)
+            {
+                return static_cast<int>(index);
+            }
+        }
+
+        for (std::size_t index = 0; index < touchTrackers_.size(); ++index)
+        {
+            if (!touchTrackers_[index].active)
+            {
+                touchTrackers_[index].id = id;
+                return static_cast<int>(index);
+            }
+        }
+
+        return -1;
+    }
+
+    void ResetTouchTrackers()
+    {
+        for (TouchTracker& tracker : touchTrackers_)
+        {
+            tracker = {};
+        }
+    }
+
+    static float DistanceSquared(bk::Vector2 a, bk::Vector2 b)
+    {
+        const float dx = b.x - a.x;
+        const float dy = b.y - a.y;
+        return dx * dx + dy * dy;
+    }
+
+    void EmitTrailSegment(bk::Vector2 from, bk::Vector2 to, float strength)
+    {
+        const float dx = to.x - from.x;
+        const float dy = to.y - from.y;
+        const float distance = std::sqrt(dx * dx + dy * dy);
+        const float spacing = 1.0F / 72.0F;
+        const int steps = std::max(1, static_cast<int>(std::ceil(distance / spacing)));
+
+        for (int index = 1; index <= steps; ++index)
+        {
+            const float t = static_cast<float>(index) / static_cast<float>(steps);
+            EmitPulse(from.x + dx * t, from.y + dy * t, strength);
+        }
+    }
+
+    void EmitPulse(float x, float y, float strength)
+    {
+        pulses_[pulseHead_] = Pulse{
+            Clamp01(x),
+            Clamp01(y),
+            0.0F,
+            strength,
         };
-        const bk::Rect thumb = ThumbRect();
-
-        queue.PushRoundedRect(track, bk::ColorRGBA{0.18F, 0.24F, 0.34F, 1.0F}, 4.0F);
-        queue.PushRoundedRect(
-            thumb,
-            dragging_
-                ? bk::ColorRGBA{0.90F, 0.95F, 1.0F, 1.0F}
-                : (HasFocus()
-                    ? bk::ColorRGBA{0.78F, 0.88F, 1.0F, 1.0F}
-                    : bk::ColorRGBA{0.63F, 0.74F, 0.92F, 1.0F}),
-            thumb.height * 0.5F);
+        pulseHead_ = (pulseHead_ + 1) % pulses_.size();
     }
 
-    void PointerDown(const bk::Vector2& position) override
-    {
-        dragging_ = true;
-        UpdateFromPosition(position.x);
-    }
-
-    void PointerMove(const bk::Vector2& position) override
-    {
-        if (dragging_)
-        {
-            UpdateFromPosition(position.x);
-        }
-    }
-
-    void PointerUp(const bk::Vector2&) override
-    {
-        dragging_ = false;
-    }
-
-    void KeyDown(const bk::InputState::KeyEvent& key) override
-    {
-        if (std::strcmp(key.name, "Left") == 0)
-        {
-            SetValueAndNotify(value_ - 12.0F);
-        }
-        else if (std::strcmp(key.name, "Right") == 0)
-        {
-            SetValueAndNotify(value_ + 12.0F);
-        }
-    }
-
-private:
-    [[nodiscard]] float Normalized() const
-    {
-        const float span = maxValue_ - minValue_;
-        if (span <= 0.0001F)
-        {
-            return 0.0F;
-        }
-
-        return std::clamp((value_ - minValue_) / span, 0.0F, 1.0F);
-    }
-
-    [[nodiscard]] bk::Rect ThumbRect() const
-    {
-        const bk::Rect content = GetContentFrame();
-        const float thumbWidth = std::min(44.0F, std::max(28.0F, content.width * 0.14F));
-        const float travel = std::max(0.0F, content.width - thumbWidth);
-        return bk::Rect{
-            content.x + travel * Normalized(),
-            content.y + (content.height - 22.0F) * 0.5F,
-            thumbWidth,
-            22.0F,
-        };
-    }
-
-    void UpdateFromPosition(float x)
-    {
-        const bk::Rect content = GetContentFrame();
-        const float thumbWidth = std::min(44.0F, std::max(28.0F, content.width * 0.14F));
-        const float travel = std::max(1.0F, content.width - thumbWidth);
-        const float normalized = std::clamp((x - content.x - thumbWidth * 0.5F) / travel, 0.0F, 1.0F);
-        SetValueAndNotify(minValue_ + (maxValue_ - minValue_) * normalized);
-    }
-
-    void SetValueAndNotify(float value)
-    {
-        const float before = value_;
-        SetValue(value);
-        if (callback_ && before != value_)
-        {
-            callback_(value_);
-        }
-    }
-
-    float minValue_ = 260.0F;
-    float maxValue_ = 460.0F;
-    float value_ = 312.0F;
-    bool dragging_ = false;
-    Callback callback_{};
+    std::array<Pulse, kMaxPulseCount> pulses_{};
+    std::array<TouchTracker, bk::InputState::MaxTouchPoints> touchTrackers_{};
+    std::size_t pulseHead_ = 0;
+    bool mouseTracked_ = false;
+    bk::Vector2 lastMousePointer_{};
+    static constexpr float kMinPointerStepSquared = 0.00001F;
 };
 
-bk::FocusHighlightStyle MakeFocusStyle(const bk::ColorRGBA& color1, const bk::ColorRGBA& color2, float inset = 6.0F)
+#if !defined(BKUI_PLATFORM_SWITCH)
+struct GLFunctions
 {
-    bk::FocusHighlightStyle style;
-    style.color1 = color1;
-    style.color2 = color2;
-    style.cornerRadius = -1.0F;
-    style.inset = inset;
-    return style;
+    PFNGLCREATESHADERPROC createShader = nullptr;
+    PFNGLSHADERSOURCEPROC shaderSource = nullptr;
+    PFNGLCOMPILESHADERPROC compileShader = nullptr;
+    PFNGLGETSHADERIVPROC getShaderiv = nullptr;
+    PFNGLGETSHADERINFOLOGPROC getShaderInfoLog = nullptr;
+    PFNGLDELETESHADERPROC deleteShader = nullptr;
+    PFNGLCREATEPROGRAMPROC createProgram = nullptr;
+    PFNGLATTACHSHADERPROC attachShader = nullptr;
+    PFNGLLINKPROGRAMPROC linkProgram = nullptr;
+    PFNGLGETPROGRAMIVPROC getProgramiv = nullptr;
+    PFNGLGETPROGRAMINFOLOGPROC getProgramInfoLog = nullptr;
+    PFNGLDELETEPROGRAMPROC deleteProgram = nullptr;
+    PFNGLUSEPROGRAMPROC useProgram = nullptr;
+    PFNGLGENVERTEXARRAYSPROC genVertexArrays = nullptr;
+    PFNGLBINDVERTEXARRAYPROC bindVertexArray = nullptr;
+    PFNGLDELETEVERTEXARRAYSPROC deleteVertexArrays = nullptr;
+    PFNGLGENBUFFERSPROC genBuffers = nullptr;
+    PFNGLBINDBUFFERPROC bindBuffer = nullptr;
+    PFNGLBUFFERDATAPROC bufferData = nullptr;
+    PFNGLDELETEBUFFERSPROC deleteBuffers = nullptr;
+    PFNGLENABLEVERTEXATTRIBARRAYPROC enableVertexAttribArray = nullptr;
+    PFNGLVERTEXATTRIBPOINTERPROC vertexAttribPointer = nullptr;
+    PFNGLGETUNIFORMLOCATIONPROC getUniformLocation = nullptr;
+    PFNGLUNIFORM1IPROC uniform1i = nullptr;
+    PFNGLUNIFORM1FPROC uniform1f = nullptr;
+    PFNGLUNIFORM2FPROC uniform2f = nullptr;
+    PFNGLUNIFORM4FVPROC uniform4fv = nullptr;
+};
+
+template <typename T>
+bool LoadProc(bk::Platform& platform, T& target, const char* name)
+{
+    target = reinterpret_cast<T>(platform.GetOpenGLProcAddress(name));
+    return target != nullptr;
 }
 
-// 模态覆盖层：以最高层级盖在 DemoPage 上，展示 Top View、
-// 默认焦点、最近焦点、点击外部关闭等行为。
-class DemoModalView final : public bk::View
+bool LoadGL(bk::Platform& platform, GLFunctions& gl)
+{
+    return
+        LoadProc(platform, gl.createShader, "glCreateShader") &&
+        LoadProc(platform, gl.shaderSource, "glShaderSource") &&
+        LoadProc(platform, gl.compileShader, "glCompileShader") &&
+        LoadProc(platform, gl.getShaderiv, "glGetShaderiv") &&
+        LoadProc(platform, gl.getShaderInfoLog, "glGetShaderInfoLog") &&
+        LoadProc(platform, gl.deleteShader, "glDeleteShader") &&
+        LoadProc(platform, gl.createProgram, "glCreateProgram") &&
+        LoadProc(platform, gl.attachShader, "glAttachShader") &&
+        LoadProc(platform, gl.linkProgram, "glLinkProgram") &&
+        LoadProc(platform, gl.getProgramiv, "glGetProgramiv") &&
+        LoadProc(platform, gl.getProgramInfoLog, "glGetProgramInfoLog") &&
+        LoadProc(platform, gl.deleteProgram, "glDeleteProgram") &&
+        LoadProc(platform, gl.useProgram, "glUseProgram") &&
+        LoadProc(platform, gl.genVertexArrays, "glGenVertexArrays") &&
+        LoadProc(platform, gl.bindVertexArray, "glBindVertexArray") &&
+        LoadProc(platform, gl.deleteVertexArrays, "glDeleteVertexArrays") &&
+        LoadProc(platform, gl.genBuffers, "glGenBuffers") &&
+        LoadProc(platform, gl.bindBuffer, "glBindBuffer") &&
+        LoadProc(platform, gl.bufferData, "glBufferData") &&
+        LoadProc(platform, gl.deleteBuffers, "glDeleteBuffers") &&
+        LoadProc(platform, gl.enableVertexAttribArray, "glEnableVertexAttribArray") &&
+        LoadProc(platform, gl.vertexAttribPointer, "glVertexAttribPointer") &&
+        LoadProc(platform, gl.getUniformLocation, "glGetUniformLocation") &&
+        LoadProc(platform, gl.uniform1i, "glUniform1i") &&
+        LoadProc(platform, gl.uniform1f, "glUniform1f") &&
+        LoadProc(platform, gl.uniform2f, "glUniform2f") &&
+        LoadProc(platform, gl.uniform4fv, "glUniform4fv");
+}
+
+GLuint CompileShader(const GLFunctions& gl, GLenum shaderType, const char* source)
+{
+    const GLuint shader = gl.createShader(shaderType);
+    if (shader == 0)
+    {
+        return 0;
+    }
+
+    const GLchar* sources[] = {source};
+    gl.shaderSource(shader, 1, sources, nullptr);
+    gl.compileShader(shader);
+
+    GLint ok = GL_FALSE;
+    gl.getShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (ok == GL_FALSE)
+    {
+        std::array<GLchar, 1024> log{};
+        gl.getShaderInfoLog(shader, static_cast<GLsizei>(log.size()), nullptr, log.data());
+        std::fprintf(stderr, "Shader compile failed: %s\n", log.data());
+        gl.deleteShader(shader);
+        return 0;
+    }
+
+    return shader;
+}
+
+GLuint LinkProgram(const GLFunctions& gl, GLuint vertexShader, GLuint fragmentShader)
+{
+    const GLuint program = gl.createProgram();
+    if (program == 0)
+    {
+        return 0;
+    }
+
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+
+    GLint ok = GL_FALSE;
+    gl.getProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok == GL_FALSE)
+    {
+        std::array<GLchar, 1024> log{};
+        gl.getProgramInfoLog(program, static_cast<GLsizei>(log.size()), nullptr, log.data());
+        std::fprintf(stderr, "Program link failed: %s\n", log.data());
+        gl.deleteProgram(program);
+        return 0;
+    }
+
+    return program;
+}
+
+class OpenGLNeonGridDemo
 {
 public:
-    DemoModalView()
+    explicit OpenGLNeonGridDemo(bk::Platform& platform)
+        : platform_(platform)
     {
-        // 提高 z-index，确保遮罩和对话框绘制在主页面之上。
-        SetName("ModalOverlay");
-        SetZIndex(100);
-
-        // 对话框本体使用 VBox，纵向排列标题、状态文本和两行按钮。
-        dialog_ = std::make_shared<bk::VBox>();
-        dialog_->SetName("ModalDialog");
-        dialog_->SetDrawBackground(true);
-        dialog_->SetBackgroundColor(bk::ColorRGBA{0.12F, 0.15F, 0.23F, 1.0F});
-        dialog_->SetCornerRadius(24.0F);
-        dialog_->SetShadowEnabled(true);
-        dialog_->SetShadowOffset(0.0F, 18.0F);
-        dialog_->SetShadowBlurRadius(24.0F);
-        dialog_->SetShadowSpread(4.0F);
-        dialog_->SetShadowColor(bk::ColorRGBA{0.0F, 0.0F, 0.0F, 0.26F});
-        dialog_->SetPaddingTop(22.0F);
-        dialog_->SetPaddingRight(24.0F);
-        dialog_->SetPaddingBottom(22.0F);
-        dialog_->SetPaddingLeft(24.0F);
-        dialog_->SetSpacing(14.0F);
-
-        title_ = MakeLabel("modal/title"_i18n, 30.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
-        subtitle_ = MakeLabel("modal/subtitle"_i18n, 17.0F, bk::ColorRGBA{0.77F, 0.84F, 0.93F, 1.0F});
-        modalFocusLabel_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.93F, 0.95F, 0.99F, 1.0F});
-        modalDefaultLabel_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
-        modalLastLabel_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
-        modalActionLabel_ = MakeLabel("modal/action_ready"_i18n, 16.0F, bk::ColorRGBA{0.98F, 0.85F, 0.50F, 1.0F});
-
-        // 四个操作按钮分成上下两行，便于演示方向键/手柄导航。
-        topRow_ = std::make_shared<bk::HBox>();
-        topRow_->SetName("ModalTopRow");
-        topRow_->SetSpacing(12.0F);
-        topRow_->SetMarginBottom(4.0F);
-        bottomRow_ = std::make_shared<bk::HBox>();
-        bottomRow_->SetName("ModalBottomRow");
-        bottomRow_->SetSpacing(12.0F);
-
-        primaryButton_ = MakeButton(
-            "modal/confirm"_i18n,
-            "modal/confirm_hint"_i18n,
-            bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F});
-        secondaryButton_ = MakeButton(
-            "modal/go_default"_i18n,
-            "modal/go_default_hint"_i18n,
-            bk::ColorRGBA{0.18F, 0.67F, 0.53F, 1.0F});
-        lastFocusButton_ = MakeButton(
-            "modal/go_last"_i18n,
-            "modal/go_last_hint"_i18n,
-            bk::ColorRGBA{0.77F, 0.48F, 0.24F, 1.0F});
-        closeButton_ = MakeButton(
-            "modal/close"_i18n,
-            "modal/close_hint"_i18n,
-            bk::ColorRGBA{0.78F, 0.32F, 0.36F, 1.0F});
-
-        // 模态框内部按钮只修改自身状态或设置关闭标记；
-        // 真正移除模态层由主循环在帧尾统一处理。
-        primaryButton_->SetCallback([this](ActionButton&) {
-            SetAction("Confirm clicked");
-        });
-        secondaryButton_->SetCallback([this](ActionButton&) {
-            SetAction("Request default focus");
-            RequestDefaultFocus();
-        });
-        lastFocusButton_->SetCallback([this](ActionButton&) {
-            SetAction("Request last focus");
-            RequestLastFocus();
-        });
-        closeButton_->SetCallback([this](ActionButton&) {
-            SetAction("Close requested");
-            closeRequested_ = true;
-        });
-
-        topRow_->AddChild(primaryButton_);
-        topRow_->AddChild(secondaryButton_);
-        bottomRow_->AddChild(lastFocusButton_);
-        bottomRow_->AddChild(closeButton_);
-
-        // 组装模态对话框的 View 树。
-        dialog_->AddChild(title_);
-        dialog_->AddChild(subtitle_);
-        dialog_->AddChild(modalFocusLabel_);
-        dialog_->AddChild(modalDefaultLabel_);
-        dialog_->AddChild(modalLastLabel_);
-        dialog_->AddChild(modalActionLabel_);
-        dialog_->AddChild(topRow_);
-        dialog_->AddChild(bottomRow_);
-        AddChild(dialog_);
-
-        // 同时给覆盖层和对话框设置默认焦点，保证打开模态框后
-        // RequestDefaultFocus 能稳定落到主按钮上。
-        SetDefaultFocusView(primaryButton_);
-        dialog_->SetDefaultFocusView(primaryButton_);
-
-        // 显式声明模态框内的方向导航关系，避免布局变化影响焦点路径。
-        primaryButton_->SetNavigationTarget(bk::NavigationDirection::Right, secondaryButton_);
-        primaryButton_->SetNavigationTarget(bk::NavigationDirection::Down, lastFocusButton_);
-        secondaryButton_->SetNavigationTarget(bk::NavigationDirection::Left, primaryButton_);
-        secondaryButton_->SetNavigationTarget(bk::NavigationDirection::Down, closeButton_);
-        lastFocusButton_->SetNavigationTarget(bk::NavigationDirection::Up, primaryButton_);
-        lastFocusButton_->SetNavigationTarget(bk::NavigationDirection::Right, closeButton_);
-        closeButton_->SetNavigationTarget(bk::NavigationDirection::Up, secondaryButton_);
-        closeButton_->SetNavigationTarget(bk::NavigationDirection::Left, lastFocusButton_);
     }
 
-    bool ConsumeCloseRequested()
+    bool Initialize()
     {
-        // “消费式”读取：外部读到 true 后立即清零，避免连续多帧重复关闭。
-        const bool requested = closeRequested_;
-        closeRequested_ = false;
-        return requested;
-    }
-
-    void ApplyWireframe(bool enabled)
-    {
-        // 模态层可能在主页面开启线框后才被创建，因此打开时需要同步一次。
-        SetDebugWireframeRecursive(shared_from_this(), enabled);
-    }
-
-    void SyncStatus(const bk::Application& app)
-    {
-        // 这些文本每帧刷新，方便观察焦点在顶层 View 与模态框内部的变化。
-        modalFocusLabel_->SetText("modal/focused"_i18n(DisplayName(app.GetFocusedView())));
-        modalDefaultLabel_->SetText("modal/default_val"_i18n(DisplayName(GetDefaultFocusView())));
-        modalLastLabel_->SetText("modal/last"_i18n(DisplayName(GetLastFocusedView())));
-    }
-
-    void Layout() override
-    {
-        // 覆盖层铺满窗口，内部对话框固定尺寸并居中。
-        const float dialogWidth = 720.0F;
-        const float dialogHeight = 332.0F;
-        dialog_->SetFrame(bk::Rect{
-            frame_.x + (frame_.width - dialogWidth) * 0.5F,
-            frame_.y + (frame_.height - dialogHeight) * 0.5F,
-            dialogWidth,
-            dialogHeight});
-        dialog_->Layout();
-        needsLayout_ = false;
-    }
-
-protected:
-    void Draw(bk::RenderQueue& queue) const override
-    {
-        // 半透明遮罩压暗主页面，突出模态层。
-        queue.PushRect(frame_, bk::ColorRGBA{0.03F, 0.04F, 0.08F, 0.72F});
-    }
-
-    void Update(float) override
-    {
-        // 使用 Application::Active() 获取当前焦点状态，保持状态文本实时更新。
-        if (bk::Application* app = bk::Application::Active())
+        if (!platform_.CreateOpenGLContext(bk::OpenGLContextDesc{}))
         {
-            SyncStatus(*app);
+            return false;
         }
+
+        platform_.MakeOpenGLContextCurrent();
+        if (!LoadGL(platform_, gl_))
+        {
+            std::fprintf(stderr, "Failed to load OpenGL procedures for neon grid demo.\n");
+            return false;
+        }
+
+        EnterFullscreenIfPossible();
+
+        const char* vertexSource = R"(
+            #version 330 core
+            layout(location = 0) in vec2 inPosition;
+            layout(location = 1) in vec2 inUv;
+            out vec2 vUv;
+            void main()
+            {
+                vUv = inUv;
+                gl_Position = vec4(inPosition, 0.0, 1.0);
+            }
+        )";
+
+        const char* fragmentSource = R"(
+            #version 330 core
+            in vec2 vUv;
+            out vec4 outColor;
+
+            uniform float uTime;
+            uniform vec2 uResolution;
+            uniform int uPulseCount;
+            uniform vec4 uPulses[64];
+
+            float hash12(vec2 p)
+            {
+                vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+                p3 += dot(p3, p3.yzx + 33.33);
+                return fract((p3.x + p3.y) * p3.z);
+            }
+
+            vec3 palette(float t)
+            {
+                return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.00, 0.19, 0.41)));
+            }
+
+            vec3 regionColor(vec2 cell)
+            {
+                vec2 region = floor(cell / vec2(4.0, 3.0));
+                float regionSeed = hash12(region + vec2(1.37, 4.91));
+                float localSeed = hash12(cell * 0.37 + vec2(8.12, 2.45));
+                float hue = fract(regionSeed * 0.77 + localSeed * 0.33);
+                vec3 tint = palette(hue);
+                return mix(vec3(0.28, 0.72, 1.00), tint, 0.75);
+            }
+
+            float gridLineMask(vec2 gridUv)
+            {
+                vec2 local = fract(gridUv);
+                vec2 edge = min(local, 1.0 - local);
+                vec2 fw = fwidth(gridUv);
+                float gx = 1.0 - smoothstep(0.0, fw.x * 1.15, edge.x);
+                float gy = 1.0 - smoothstep(0.0, fw.y * 1.15, edge.y);
+                return max(gx, gy);
+            }
+
+            void main()
+            {
+                vec2 uv = vUv;
+                vec2 gridCount = vec2(45.0, 25.0);
+                vec2 gridUv = uv * gridCount;
+                vec2 cell = floor(gridUv);
+                vec2 cellCenterUv = (cell + 0.5) / gridCount;
+
+                vec2 aspect = vec2(uResolution.x / max(uResolution.y, 1.0), 1.0);
+                vec2 cellCenter = (cellCenterUv - 0.5) * aspect;
+                vec3 tint = regionColor(cell);
+
+                float pulseGlow = 0.0;
+                for (int i = 0; i < 64; ++i)
+                {
+                    if (i >= uPulseCount)
+                    {
+                        break;
+                    }
+
+                    vec4 pulse = uPulses[i];
+                    float progress = clamp(pulse.z, 0.0, 1.0);
+                    float life = 1.0 - progress;
+                    vec2 pulseCenter = (pulse.xy - 0.5) * aspect;
+                    float dist = length(cellCenter - pulseCenter);
+
+                    float radius = mix(0.0, 0.78, progress);
+                    float band = mix(0.018, 0.050, progress);
+                    float ring = exp(-pow((dist - radius) / max(band, 0.0001), 2.0) * 10.0);
+                    float halo = exp(-pow((dist - radius * 0.72) / max(band * 1.9, 0.0001), 2.0) * 3.0) * 0.30;
+                    float core = exp(-dist * 20.0) * exp(-progress * 12.0) * 0.55;
+                    float fade = life * life;
+
+                    pulseGlow += (ring + halo + core) * fade * pulse.w;
+                }
+
+                pulseGlow = min(pulseGlow, 1.8);
+
+                float gridMask = gridLineMask(gridUv);
+                float cellNoise = 0.96 + 0.04 * sin(dot(cell, vec2(0.8, 1.3)) + uTime * 3.5);
+
+                vec3 color = vec3(0.0);
+                color += tint * pulseGlow * 1.45 * cellNoise;
+                color += vec3(1.0) * gridMask * (0.82 + min(pulseGlow, 1.0) * 0.40);
+
+                color = color / (1.0 + color * 0.35);
+                outColor = vec4(color, 1.0);
+            }
+        )";
+
+        const char* overlayFragmentSource = R"(
+            #version 330 core
+            in vec2 vUv;
+            out vec4 outColor;
+
+            uniform sampler2D uTexture;
+
+            void main()
+            {
+                outColor = texture(uTexture, vUv);
+            }
+        )";
+
+        const GLuint vertexShader = CompileShader(gl_, GL_VERTEX_SHADER, vertexSource);
+        const GLuint fragmentShader = CompileShader(gl_, GL_FRAGMENT_SHADER, fragmentSource);
+        const GLuint overlayFragmentShader = CompileShader(gl_, GL_FRAGMENT_SHADER, overlayFragmentSource);
+        if (vertexShader == 0 || fragmentShader == 0 || overlayFragmentShader == 0)
+        {
+            if (vertexShader != 0)
+            {
+                gl_.deleteShader(vertexShader);
+            }
+            if (fragmentShader != 0)
+            {
+                gl_.deleteShader(fragmentShader);
+            }
+            if (overlayFragmentShader != 0)
+            {
+                gl_.deleteShader(overlayFragmentShader);
+            }
+            return false;
+        }
+
+        program_ = LinkProgram(gl_, vertexShader, fragmentShader);
+        overlayProgram_ = LinkProgram(gl_, vertexShader, overlayFragmentShader);
+        gl_.deleteShader(vertexShader);
+        gl_.deleteShader(fragmentShader);
+        gl_.deleteShader(overlayFragmentShader);
+        if (program_ == 0 || overlayProgram_ == 0)
+        {
+            return false;
+        }
+
+        constexpr std::array<float, 24> quadVertices = {{
+            -1.0F,  1.0F, 0.0F, 0.0F,
+            -1.0F, -1.0F, 0.0F, 1.0F,
+             1.0F, -1.0F, 1.0F, 1.0F,
+            -1.0F,  1.0F, 0.0F, 0.0F,
+             1.0F, -1.0F, 1.0F, 1.0F,
+             1.0F,  1.0F, 1.0F, 0.0F,
+        }};
+
+        gl_.genVertexArrays(1, &vao_);
+        gl_.bindVertexArray(vao_);
+        gl_.genBuffers(1, &vbo_);
+        gl_.bindBuffer(GL_ARRAY_BUFFER, vbo_);
+        gl_.bufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices.data(), GL_STATIC_DRAW);
+        gl_.enableVertexAttribArray(0);
+        gl_.vertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, reinterpret_cast<void*>(0));
+        gl_.enableVertexAttribArray(1);
+        gl_.vertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, reinterpret_cast<void*>(sizeof(float) * 2));
+        gl_.bindBuffer(GL_ARRAY_BUFFER, 0);
+        gl_.bindVertexArray(0);
+
+        gl_.genVertexArrays(1, &overlayVao_);
+        gl_.bindVertexArray(overlayVao_);
+        gl_.genBuffers(1, &overlayVbo_);
+        gl_.bindBuffer(GL_ARRAY_BUFFER, overlayVbo_);
+        gl_.bufferData(GL_ARRAY_BUFFER, sizeof(float) * 24, nullptr, GL_DYNAMIC_DRAW);
+        gl_.enableVertexAttribArray(0);
+        gl_.vertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, reinterpret_cast<void*>(0));
+        gl_.enableVertexAttribArray(1);
+        gl_.vertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, reinterpret_cast<void*>(sizeof(float) * 2));
+        gl_.bindBuffer(GL_ARRAY_BUFFER, 0);
+        gl_.bindVertexArray(0);
+
+        debugImage_ = demo::MakeImage(
+            static_cast<int>(kDesignWidth),
+            static_cast<int>(kDesignHeight),
+            0,
+            0,
+            0,
+            0);
+        glGenTextures(1, &debugTexture_);
+        glBindTexture(GL_TEXTURE_2D, debugTexture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA,
+            debugImage_.width,
+            debugImage_.height,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            debugImage_.pixels.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        pulseUniforms_.fill(0.0F);
+        return true;
     }
 
-    void Click(const bk::Vector2& position) override
+    void Shutdown()
     {
-        // 点击对话框外部等价于请求关闭；点击内部按钮则由按钮自己处理。
-        if (!dialog_->ContainsPoint(position))
+        if (debugTexture_ != 0)
         {
-            closeRequested_ = true;
+            glDeleteTextures(1, &debugTexture_);
+            debugTexture_ = 0;
         }
+        if (overlayVbo_ != 0)
+        {
+            gl_.deleteBuffers(1, &overlayVbo_);
+            overlayVbo_ = 0;
+        }
+        if (overlayVao_ != 0)
+        {
+            gl_.deleteVertexArrays(1, &overlayVao_);
+            overlayVao_ = 0;
+        }
+        if (overlayProgram_ != 0)
+        {
+            gl_.deleteProgram(overlayProgram_);
+            overlayProgram_ = 0;
+        }
+        if (vbo_ != 0)
+        {
+            gl_.deleteBuffers(1, &vbo_);
+            vbo_ = 0;
+        }
+        if (vao_ != 0)
+        {
+            gl_.deleteVertexArrays(1, &vao_);
+            vao_ = 0;
+        }
+        if (program_ != 0)
+        {
+            gl_.deleteProgram(program_);
+            program_ = 0;
+        }
+        platform_.DestroyOpenGLContext();
+    }
+
+    void Step(
+        const bk::InputState& input,
+        bk::Vector2 logicalSize,
+        float deltaSeconds,
+        const bk::RenderQueue& overlayQueue)
+    {
+        elapsedSeconds_ += deltaSeconds;
+        trail_.Update(input, logicalSize, deltaSeconds);
+        UploadPulseUniforms();
+        UpdateDebugOverlay(input, logicalSize, overlayQueue);
+        DrawScene(logicalSize);
     }
 
 private:
-    static std::shared_ptr<bk::Label> MakeLabel(const std::string& text, float fontSize, const bk::ColorRGBA& color)
+    void EnterFullscreenIfPossible()
     {
-        // 小型工厂函数减少构造 Label 时重复设置字号和颜色的样板代码。
-        auto label = std::make_shared<bk::Label>(text);
-        label->SetFontSize(fontSize);
-        label->SetTextColor(color);
-        return label;
+        SDL_Window* window = SDL_GL_GetCurrentWindow();
+        if (window != nullptr)
+        {
+            SDL_SetWindowFullscreen(window, true);
+        }
     }
 
-    static std::shared_ptr<ActionButton> MakeButton(const std::string& title, const std::string& subtitle, const bk::ColorRGBA& color)
+    void UploadPulseUniforms()
     {
-        // 模态框按钮等宽拉伸，让两列按钮保持整齐。
-        auto button = std::make_shared<ActionButton>(title, subtitle);
-        button->SetBackgroundColor(color);
-        button->SetFlexGrow(1.0F);
-        button->SetTextColor(bk::ColorRGBA{1.0F, 1.0F, 1.0F, 1.0F});
-        return button;
-    }
+        pulseUniforms_.fill(0.0F);
+        pulseCount_ = 0;
 
-    void SetAction(std::string action)
-    {
-        // action 文本仍走 i18n 模板，真正的动作描述作为参数插入。
-        modalActionLabel_->SetText("modal/action"_i18n(std::move(action)));
-    }
-
-    std::shared_ptr<bk::VBox> dialog_;
-    std::shared_ptr<bk::Label> title_;
-    std::shared_ptr<bk::Label> subtitle_;
-    std::shared_ptr<bk::Label> modalFocusLabel_;
-    std::shared_ptr<bk::Label> modalDefaultLabel_;
-    std::shared_ptr<bk::Label> modalLastLabel_;
-    std::shared_ptr<bk::Label> modalActionLabel_;
-    std::shared_ptr<bk::HBox> topRow_;
-    std::shared_ptr<bk::HBox> bottomRow_;
-    std::shared_ptr<ActionButton> primaryButton_;
-    std::shared_ptr<ActionButton> secondaryButton_;
-    std::shared_ptr<ActionButton> lastFocusButton_;
-    std::shared_ptr<ActionButton> closeButton_;
-    bool closeRequested_ = false;
-};
-
-class DemoPage final : public bk::View
-{
-public:
-    DemoPage()
-    {
-        SetName("RootPage");
-
-        // 根页面放进纵向 ScrollView，窗口高度不足时仍能访问完整演示内容。
-        rootScroll_ = std::make_shared<bk::ScrollView>(bk::ScrollAxis::Vertical);
-        rootScroll_->SetName("RootScroll");
-
-        // 根列是页面的主布局容器，宽度固定为设计宽度，高度至少为设计高度。
-        rootColumn_ = std::make_shared<bk::VBox>();
-        rootColumn_->SetName("RootColumn");
-        rootColumn_->SetPaddingTop(24.0F);
-        rootColumn_->SetPaddingRight(24.0F);
-        rootColumn_->SetPaddingBottom(24.0F);
-        rootColumn_->SetPaddingLeft(24.0F);
-        rootColumn_->SetSpacing(20.0F);
-        rootColumn_->SetWidth(kDesignWidth);
-        rootColumn_->SetMinHeight(kDesignHeight);
-
-        // 顶部标题栏：左侧是标题说明，右侧是操作提示。
-        headerBar_ = std::make_shared<bk::HBox>();
-        headerBar_->SetName("HeaderBar");
-        headerBar_->SetDrawBackground(true);
-        headerBar_->SetBackgroundColor(bk::ColorRGBA{0.11F, 0.16F, 0.25F, 1.0F});
-        headerBar_->SetPaddingTop(18.0F);
-        headerBar_->SetPaddingRight(22.0F);
-        headerBar_->SetPaddingBottom(18.0F);
-        headerBar_->SetPaddingLeft(22.0F);
-        headerBar_->SetMinHeight(92.0F);
-
-        headerText_ = std::make_shared<bk::VBox>();
-        headerText_->SetName("HeaderText");
-        headerText_->SetSpacing(6.0F);
-        headerText_->SetFlexGrow(1.0F);
-        headerTitle_ = MakeLabel("page/title"_i18n, 33.0F, bk::ColorRGBA{0.98F, 0.99F, 1.0F, 1.0F});
-        headerSubtitle_ = MakeLabel("page/subtitle"_i18n, 17.0F, bk::ColorRGBA{0.77F, 0.84F, 0.93F, 1.0F});
-        headerText_->AddChild(headerTitle_);
-        headerText_->AddChild(headerSubtitle_);
-        headerHint_ = MakeLabel("page/hint"_i18n, 16.0F, bk::ColorRGBA{0.98F, 0.85F, 0.51F, 1.0F});
-        headerHint_->SetWidth(360.0F);
-        headerBar_->AddChild(headerText_);
-        headerBar_->AddChild(headerHint_);
-
-        // 页面主体分左右两列：左侧偏控制区，右侧偏状态和内容区。
-        bodyRow_ = std::make_shared<bk::HBox>();
-        bodyRow_->SetName("BodyRow");
-        bodyRow_->SetSpacing(20.0F);
-        bodyRow_->SetFlexGrow(1.0F);
-
-        leftColumn_ = std::make_shared<bk::VBox>();
-        leftColumn_->SetName("LeftColumn");
-        leftColumn_->SetWidth(296.0F);
-        leftColumn_->SetSpacing(16.0F);
-
-        // 导航面板演示普通按钮点击、焦点路径和打开模态层。
-        navPanel_ = MakePanel("NavPanel", bk::ColorRGBA{0.93F, 0.95F, 0.99F, 1.0F});
-        navTitle_ = MakeLabel("nav/title"_i18n, 24.0F, bk::ColorRGBA{0.10F, 0.14F, 0.21F, 1.0F});
-        navTip_ = MakeLabel("nav/tip"_i18n, 16.0F, bk::ColorRGBA{0.31F, 0.38F, 0.49F, 1.0F});
-        navHome_ = MakeActionButton("nav/home"_i18n, "nav/home_hint"_i18n, bk::ColorRGBA{0.22F, 0.49F, 0.93F, 1.0F});
-        navGallery_ = MakeActionButton("nav/gallery"_i18n, "nav/gallery_hint"_i18n, bk::ColorRGBA{0.20F, 0.64F, 0.55F, 1.0F});
-        openModalButton_ = MakeActionButton("nav/open_modal"_i18n, "nav/open_modal_hint"_i18n, bk::ColorRGBA{0.79F, 0.45F, 0.26F, 1.0F});
-        openModalButton_->SetMarginTop(4.0F);
-        navPanel_->AddChild(navTitle_);
-        navPanel_->AddChild(navTip_);
-        navPanel_->AddChild(navHome_);
-        navPanel_->AddChild(navGallery_);
-        navPanel_->AddChild(openModalButton_);
-
-        // 焦点面板集中演示默认焦点、最近焦点、清空焦点、线框和焦点高亮效果。
-        focusPanel_ = MakePanel("FocusPanel", bk::ColorRGBA{0.14F, 0.18F, 0.28F, 1.0F});
-        focusTitle_ = MakeLabel("focus/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
-        focusTip_ = MakeLabel("focus/tip"_i18n, 16.0F, bk::ColorRGBA{0.78F, 0.84F, 0.93F, 1.0F});
-        focusDefaultButton_ = MakeActionButton("focus/go_default"_i18n, "focus/go_default_hint"_i18n, bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F});
-        focusLastButton_ = MakeActionButton("focus/go_last"_i18n, "focus/go_last_hint"_i18n, bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F});
-        focusClearButton_ = MakeActionButton("focus/clear"_i18n, "focus/clear_hint"_i18n, bk::ColorRGBA{0.72F, 0.34F, 0.39F, 1.0F});
-        focusWireframeButton_ = MakeActionButton("focus/wireframe_off"_i18n, "focus/wireframe_hint"_i18n, bk::ColorRGBA{0.43F, 0.40F, 0.86F, 1.0F});
-        focusMotionButton_ = MakeActionButton("focus/motion_on"_i18n, "focus/motion_hint"_i18n, bk::ColorRGBA{0.86F, 0.36F, 0.72F, 1.0F});
-        focusLayerTrailButton_ = MakeActionButton("focus/trail_on"_i18n, "focus/trail_hint"_i18n, bk::ColorRGBA{0.34F, 0.62F, 0.88F, 1.0F});
-        focusThemeLabel_ = MakeLabel("focus/theme_label"_i18n("Aurora"), 15.0F, bk::ColorRGBA{0.84F, 0.89F, 0.97F, 1.0F});
-        focusThemeAuroraButton_ = MakeActionButton("focus/theme_aurora"_i18n, "focus/theme_aurora_hint"_i18n, bk::ColorRGBA{0.24F, 0.52F, 0.95F, 1.0F});
-        focusThemeSunsetButton_ = MakeActionButton("focus/theme_sunset"_i18n, "focus/theme_sunset_hint"_i18n, bk::ColorRGBA{0.92F, 0.46F, 0.34F, 1.0F});
-        focusThemeMintButton_ = MakeActionButton("focus/theme_mint"_i18n, "focus/theme_mint_hint"_i18n, bk::ColorRGBA{0.22F, 0.72F, 0.64F, 1.0F});
-        focusPanel_->AddChild(focusTitle_);
-        focusPanel_->AddChild(focusTip_);
-        focusPanel_->AddChild(focusDefaultButton_);
-        focusPanel_->AddChild(focusLastButton_);
-        focusPanel_->AddChild(focusClearButton_);
-        focusPanel_->AddChild(focusWireframeButton_);
-        focusPanel_->AddChild(focusMotionButton_);
-        focusPanel_->AddChild(focusLayerTrailButton_);
-        focusPanel_->AddChild(focusThemeLabel_);
-        focusPanel_->AddChild(focusThemeAuroraButton_);
-        focusPanel_->AddChild(focusThemeSunsetButton_);
-        focusPanel_->AddChild(focusThemeMintButton_);
-
-        // 语言面板演示运行时切换 i18n 文案。
-        langPanel_ = MakePanel("LangPanel", bk::ColorRGBA{0.14F, 0.18F, 0.28F, 1.0F});
-        langTitle_ = MakeLabel("lang/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
-        langHint_ = MakeLabel("lang/hint"_i18n, 16.0F, bk::ColorRGBA{0.78F, 0.84F, 0.93F, 1.0F});
-        langZhButton_ = MakeActionButton("lang/zh"_i18n, "lang/zh_hint"_i18n, bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F});
-        langEnButton_ = MakeActionButton("lang/en"_i18n, "lang/en_hint"_i18n, bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F});
-        langPanel_->AddChild(langTitle_);
-        langPanel_->AddChild(langHint_);
-        langPanel_->AddChild(langZhButton_);
-        langPanel_->AddChild(langEnButton_);
-
-        // 左列的三个面板按控制类别从上到下排列。
-        leftColumn_->AddChild(navPanel_);
-        leftColumn_->AddChild(focusPanel_);
-        leftColumn_->AddChild(langPanel_);
-
-        // 右列展示实时状态、View 树和内容区动作按钮。
-        rightColumn_ = std::make_shared<bk::VBox>();
-        rightColumn_->SetName("RightColumn");
-        rightColumn_->SetFlexGrow(1.0F);
-        rightColumn_->SetSpacing(16.0F);
-
-        // 状态面板显示当前焦点、默认焦点、最近焦点、指针位置、输入事件和顶层 View 数量。
-        statusPanel_ = MakePanel("StatusPanel", bk::ColorRGBA{0.11F, 0.15F, 0.23F, 1.0F});
-        statusTitle_ = MakeLabel("status/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
-        statusFocus_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.94F, 0.96F, 1.0F, 1.0F});
-        statusDefault_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
-        statusLast_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
-        statusPointer_ = MakeLabel("", 16.0F, bk::ColorRGBA{0.80F, 0.86F, 0.95F, 1.0F});
-        statusKey_ = MakeLabel("status/key_idle"_i18n, 16.0F, bk::ColorRGBA{0.98F, 0.85F, 0.51F, 1.0F});
-        statusAction_ = MakeLabel("status/action_ready"_i18n, 16.0F, bk::ColorRGBA{0.98F, 0.85F, 0.51F, 1.0F});
-        statusModal_ = MakeLabel("Top Views: 1", 16.0F, bk::ColorRGBA{0.76F, 0.83F, 0.92F, 1.0F});
-        statusPanel_->AddChild(statusTitle_);
-        statusPanel_->AddChild(statusFocus_);
-        statusPanel_->AddChild(statusDefault_);
-        statusPanel_->AddChild(statusLast_);
-        statusPanel_->AddChild(statusPointer_);
-        statusPanel_->AddChild(statusKey_);
-        statusPanel_->AddChild(statusAction_);
-        statusPanel_->AddChild(statusModal_);
-
-        lowerRow_ = std::make_shared<bk::HBox>();
-        lowerRow_->SetName("LowerRow");
-        lowerRow_->SetSpacing(14.0F);
-        lowerRow_->SetFlexGrow(1.0F);
-
-        treeSizePanel_ = MakePanel("TreeSizePanel", bk::ColorRGBA{0.11F, 0.15F, 0.23F, 1.0F});
-        treeSizePanel_->SetPaddingTop(14.0F);
-        treeSizePanel_->SetPaddingRight(16.0F);
-        treeSizePanel_->SetPaddingBottom(14.0F);
-        treeSizePanel_->SetPaddingLeft(16.0F);
-        treeSizePanel_->SetSpacing(10.0F);
-        treeSizeLabel_ = MakeLabel("Action Panel Scale", 18.0F, bk::ColorRGBA{0.96F, 0.97F, 0.99F, 1.0F});
-        treeSizeValueLabel_ = MakeLabel("", 15.0F, bk::ColorRGBA{0.77F, 0.84F, 0.93F, 1.0F});
-        treeSizeScrollbar_ = std::make_shared<SizeScrollbar>();
-        treeSizeScrollbar_->SetRange(kActionPanelMinScale * 100.0F, kActionPanelMaxScale * 100.0F);
-        treeSizeScrollbar_->SetValue(actionPanelScale_ * 100.0F);
-        treeSizeScrollbar_->SetCallback([this](float value) {
-            actionPanelScale_ = value / 100.0F;
-            actionPanel_->SetScale(actionPanelScale_);
-        });
-        treeSizePanel_->AddChild(treeSizeLabel_);
-        treeSizePanel_->AddChild(treeSizeValueLabel_);
-        treeSizePanel_->AddChild(treeSizeScrollbar_);
-
-        // View 树面板用于观察当前 Application 中可见 View 的层级关系。
-        treePanel_ = MakePanel("TreePanel", bk::ColorRGBA{0.93F, 0.95F, 0.99F, 1.0F});
-        treePanel_->SetWidth(318.0F);
-        treeTitle_ = MakeLabel("tree/title"_i18n, 23.0F, bk::ColorRGBA{0.10F, 0.14F, 0.21F, 1.0F});
-        treeSubtitle_ = MakeLabel("tree/subtitle"_i18n, 16.0F, bk::ColorRGBA{0.31F, 0.38F, 0.49F, 1.0F});
-        treePanel_->AddChild(treeTitle_);
-        treePanel_->AddChild(treeSubtitle_);
-        // 预先创建固定数量的文本行，刷新时只替换内容，避免每帧增删控件。
-        for (int index = 0; index < 16; ++index)
+        for (const Pulse& pulse : trail_.Pulses())
         {
-            auto line = MakeLabel("", 15.0F, bk::ColorRGBA{0.16F, 0.22F, 0.32F, 1.0F});
-            line->SetMarginLeft(4.0F);
-            treeLines_.push_back(line);
-            treePanel_->AddChild(line);
-        }
-
-        // 内容动作区提供另一组可聚焦按钮，用来测试跨区域方向导航。
-        actionPanel_ = MakePanel("ActionPanel", bk::ColorRGBA{0.14F, 0.18F, 0.28F, 1.0F});
-        actionPanel_->SetFlexGrow(1.0F);
-        actionPanel_->SetScale(actionPanelScale_);
-        actionTitle_ = MakeLabel("action/title"_i18n, 24.0F, bk::ColorRGBA{0.97F, 0.98F, 1.0F, 1.0F});
-        actionSubtitle_ = MakeLabel("action/subtitle"_i18n, 16.0F, bk::ColorRGBA{0.78F, 0.84F, 0.93F, 1.0F});
-        actionRowTop_ = std::make_shared<bk::HBox>();
-        actionRowTop_->SetName("ActionRowTop");
-        actionRowTop_->SetSpacing(12.0F);
-        actionRowBottom_ = std::make_shared<bk::HBox>();
-        actionRowBottom_->SetName("ActionRowBottom");
-        actionRowBottom_->SetSpacing(12.0F);
-
-        cardOverview_ = MakeActionButton("action/overview"_i18n, "action/overview_hint"_i18n, bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F});
-        cardMetrics_ = MakeActionButton("action/metrics"_i18n, "action/metrics_hint"_i18n, bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F});
-        cardOpenModal_ = MakeActionButton("action/open_modal"_i18n, "action/open_modal_hint"_i18n, bk::ColorRGBA{0.79F, 0.45F, 0.26F, 1.0F});
-        cardRestoreFocus_ = MakeActionButton("action/restore_focus"_i18n, "action/restore_focus_hint"_i18n, bk::ColorRGBA{0.44F, 0.41F, 0.86F, 1.0F});
-
-        // 动作按钮按两行两列摆放，和左侧控制面板形成横向导航关系。
-        actionRowTop_->AddChild(cardOverview_);
-        actionRowTop_->AddChild(cardMetrics_);
-        actionRowBottom_->AddChild(cardOpenModal_);
-        actionRowBottom_->AddChild(cardRestoreFocus_);
-        actionPanel_->AddChild(actionTitle_);
-        actionPanel_->AddChild(actionSubtitle_);
-        actionPanel_->AddChild(actionRowTop_);
-        actionPanel_->AddChild(actionRowBottom_);
-        actionPanel_->SetFocusHighlightCornerRadius(18.0F);
-
-        lowerRow_->AddChild(treePanel_);
-        lowerRow_->AddChild(actionPanel_);
-
-        rightColumn_->AddChild(statusPanel_);
-        rightColumn_->AddChild(treeSizePanel_);
-        rightColumn_->AddChild(lowerRow_);
-
-        bodyRow_->AddChild(leftColumn_);
-        bodyRow_->AddChild(rightColumn_);
-
-        rootColumn_->AddChild(headerBar_);
-        rootColumn_->AddChild(bodyRow_);
-        rootScroll_->SetContent(rootColumn_);
-        AddChild(rootScroll_);
-
-        // 首次进入页面时默认聚焦左上角的 Home 按钮。
-        SetDefaultFocusView(navHome_);
-
-        // 构造控件后再统一绑定事件和方向导航，避免成员尚未初始化时互相引用。
-        BindCallbacks();
-        BuildNavigation();
-    }
-
-    void SyncStatus(const bk::Application& app, const bk::InputState& input, const bk::Vector2& windowSize)
-    {
-        // 触摸优先显示第一个触点位置；没有触摸时显示鼠标位置。
-        const bk::Vector2 pointer = input.touchCount > 0 ? input.touchPoints[0].position : input.mousePosition;
-        statusFocus_->SetText("status/focused"_i18n(DisplayName(app.GetFocusedView())));
-        statusDefault_->SetText("status/default_val"_i18n(DisplayName(GetDefaultFocusView())));
-        statusLast_->SetText("status/last"_i18n(DisplayName(GetLastFocusedView())));
-        statusPointer_->SetText(
-            "status/pointer"_i18n(
-                demo::FormatFloat(pointer.x, 0),
-                demo::FormatFloat(pointer.y, 0),
-                std::to_string(static_cast<int>(windowSize.x)),
-                std::to_string(static_cast<int>(windowSize.y))));
-        statusModal_->SetText("status/top_views"_i18n(std::to_string(app.GetViews().size())));
-        treeSizeValueLabel_->SetText("Scale: " + demo::FormatFloat(actionPanelScale_, 2) + "x");
-
-        // 只在输入状态发生变化时更新提示文本，避免空闲帧覆盖最后一次输入提示。
-        if (input.keyPressed)
-        {
-            statusKey_->SetText("status/key_pressed"_i18n(input.lastKeyEvent.name));
-        }
-        else if (input.keyReleased)
-        {
-            statusKey_->SetText("status/key_released"_i18n(input.lastKeyEvent.name));
-        }
-        else if (input.mouseLeftPressed)
-        {
-            statusKey_->SetText("status/key_mouse"_i18n);
-        }
-        else if (input.touchCount > 0 && input.touchPoints[0].pressed)
-        {
-            statusKey_->SetText("status/key_touch"_i18n);
-        }
-
-        // 构造当前可见 View 树的简略文本，每层用两个空格缩进，
-        // 聚焦节点额外标记 [F]。
-        std::vector<std::string> lines;
-        lines.reserve(treeLines_.size());
-        const auto appendTree = [&](const std::shared_ptr<bk::View>& node, int depth, const auto& self) -> void {
-            if (!node || !node->IsVisible() || lines.size() >= treeLines_.size())
+            if (pulse.strength <= 0.0F)
             {
-                return;
+                continue;
             }
 
-            std::string line(static_cast<std::size_t>(depth) * 2, ' ');
-            line += DisplayName(node);
-            if (node->HasFocus())
-            {
-                line += " [F]";
-            }
-            lines.push_back(std::move(line));
+            const std::size_t base = pulseCount_ * 4;
+            pulseUniforms_[base + 0] = pulse.x;
+            pulseUniforms_[base + 1] = pulse.y;
+            pulseUniforms_[base + 2] = Clamp01(pulse.age / kPulseLifetimeSeconds);
+            pulseUniforms_[base + 3] = pulse.strength;
+            ++pulseCount_;
 
-            for (const auto& child : node->Children())
-            {
-                if (lines.size() >= treeLines_.size())
-                {
-                    break;
-                }
-
-                self(child, depth + 1, self);
-            }
-        };
-
-        // Application 的顶层 View 可能包含主页面和模态层，因此从 app.GetViews() 开始遍历。
-        for (const auto& rootView : app.GetViews())
-        {
-            appendTree(rootView, 0, appendTree);
-            if (lines.size() >= treeLines_.size())
+            if (pulseCount_ >= kMaxPulseCount)
             {
                 break;
             }
         }
+    }
 
-        // 没有内容的预留行清空文本，防止上一帧的树节点残留。
-        for (std::size_t index = 0; index < treeLines_.size(); ++index)
+    void DrawScene(bk::Vector2 logicalSize)
+    {
+        const bk::Vector2 windowSize = platform_.GetWindowSize();
+        glViewport(0, 0, static_cast<GLsizei>(windowSize.x), static_cast<GLsizei>(windowSize.y));
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        glClearColor(0.0F, 0.0F, 0.0F, 1.0F);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        gl_.useProgram(program_);
+
+        const GLint timeLocation = gl_.getUniformLocation(program_, "uTime");
+        if (timeLocation >= 0)
         {
-            treeLines_[index]->SetText(index < lines.size() ? lines[index] : "");
+            gl_.uniform1f(timeLocation, elapsedSeconds_);
+        }
+
+        const GLint resolutionLocation = gl_.getUniformLocation(program_, "uResolution");
+        if (resolutionLocation >= 0)
+        {
+            gl_.uniform2f(resolutionLocation, logicalSize.x, logicalSize.y);
+        }
+
+        const GLint pulseCountLocation = gl_.getUniformLocation(program_, "uPulseCount");
+        if (pulseCountLocation >= 0)
+        {
+            gl_.uniform1i(pulseCountLocation, static_cast<GLint>(pulseCount_));
+        }
+
+        const GLint pulsesLocation = gl_.getUniformLocation(program_, "uPulses[0]");
+        if (pulsesLocation >= 0)
+        {
+            gl_.uniform4fv(pulsesLocation, static_cast<GLsizei>(pulseCount_), pulseUniforms_.data());
+        }
+
+        gl_.bindVertexArray(vao_);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        gl_.bindVertexArray(0);
+        gl_.useProgram(0);
+
+        DrawDebugOverlay(windowSize);
+
+        platform_.SwapOpenGLBuffers();
+    }
+
+    void UpdateDebugOverlay(
+        const bk::InputState& input,
+        bk::Vector2 logicalSize,
+        const bk::RenderQueue& overlayQueue)
+    {
+        demo::ClearImage(debugImage_, 0, 0, 0, 0);
+        demo::FillRect(debugImage_, 0, 0, 640, 220, 0, 0, 0, 180);
+        const std::string text = BuildTouchDebugText(input, logicalSize);
+        DrawMultilineText(debugImage_, text, 12, 12, 22.0F, 255, 255, 255);
+        demo::RenderQueueToImage(debugImage_, demo::GlobalFont(), overlayQueue);
+
+        glBindTexture(GL_TEXTURE_2D, debugTexture_);
+        glTexSubImage2D(
+            GL_TEXTURE_2D,
+            0,
+            0,
+            0,
+            debugImage_.width,
+            debugImage_.height,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            debugImage_.pixels.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    void DrawDebugOverlay(bk::Vector2 windowSize)
+    {
+        if (overlayProgram_ == 0 || overlayVao_ == 0 || overlayVbo_ == 0 || debugTexture_ == 0)
+        {
+            return;
+        }
+
+        const auto overlayVertices = BuildOverlayQuad(
+            0.0F,
+            0.0F,
+            windowSize.x,
+            windowSize.y,
+            windowSize);
+
+        gl_.useProgram(overlayProgram_);
+        const GLint textureLocation = gl_.getUniformLocation(overlayProgram_, "uTexture");
+        if (textureLocation >= 0)
+        {
+            gl_.uniform1i(textureLocation, 0);
+        }
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBindTexture(GL_TEXTURE_2D, debugTexture_);
+        gl_.bindVertexArray(overlayVao_);
+        gl_.bindBuffer(GL_ARRAY_BUFFER, overlayVbo_);
+        gl_.bufferData(GL_ARRAY_BUFFER, sizeof(overlayVertices), overlayVertices.data(), GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        gl_.bindBuffer(GL_ARRAY_BUFFER, 0);
+        gl_.bindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDisable(GL_BLEND);
+        gl_.useProgram(0);
+    }
+
+    bk::Platform& platform_;
+    GLFunctions gl_{};
+    PulseTrailState trail_{};
+    GLuint program_ = 0;
+    GLuint vao_ = 0;
+    GLuint vbo_ = 0;
+    GLuint overlayProgram_ = 0;
+    GLuint overlayVao_ = 0;
+    GLuint overlayVbo_ = 0;
+    GLuint debugTexture_ = 0;
+    demo::Image debugImage_{};
+    std::array<float, kMaxPulseCount * 4> pulseUniforms_{};
+    std::size_t pulseCount_ = 0;
+    float elapsedSeconds_ = 0.0F;
+};
+
+#else
+class SwitchNeonGridDemo
+{
+public:
+    explicit SwitchNeonGridDemo(bk::Platform& platform)
+        : platform_(platform)
+    {
+    }
+
+    bool Initialize()
+    {
+        device_ = bk::CreateDeko3DDevice(platform_);
+        if (!device_ || !device_->Init())
+        {
+            std::fprintf(stderr, "Failed to initialize deko3d device.\n");
+            return false;
+        }
+
+        swapchain_ = device_->GetMainSwapchain();
+        commandBuffer_ = device_->CreateCommandBuffer();
+        if (!bk::IsValid(commandBuffer_))
+        {
+            std::fprintf(stderr, "Failed to create deko3d command buffer.\n");
+            return false;
+        }
+
+        if (!CreateRenderResources())
+        {
+            return false;
+        }
+
+        Resize(platform_.GetWindowSize());
+        return true;
+    }
+
+    void Shutdown()
+    {
+        if (device_)
+        {
+            if (bk::IsValid(commandBuffer_))
+            {
+                device_->DestroyCommandBuffer(commandBuffer_);
+                commandBuffer_ = {};
+            }
+            if (bk::IsValid(pipeline_))
+            {
+                device_->DestroyPipeline(pipeline_);
+                pipeline_ = {};
+            }
+            if (bk::IsValid(fragmentShader_))
+            {
+                device_->DestroyShader(fragmentShader_);
+                fragmentShader_ = {};
+            }
+            if (bk::IsValid(vertexShader_))
+            {
+                device_->DestroyShader(vertexShader_);
+                vertexShader_ = {};
+            }
+            if (bk::IsValid(texture_))
+            {
+                device_->DestroyTexture(texture_);
+                texture_ = {};
+            }
+            if (bk::IsValid(vertexBuffer_))
+            {
+                device_->DestroyBuffer(vertexBuffer_);
+                vertexBuffer_ = {};
+            }
+            device_->Shutdown();
+            device_.reset();
         }
     }
 
-    bool ConsumeOpenModalRequest()
+    void Resize(bk::Vector2 size)
     {
-        // 页面只发出“想打开模态框”的请求，实际创建由 main 的帧尾回调完成。
-        const bool requested = openModalRequested_;
-        openModalRequested_ = false;
-        return requested;
-    }
-
-    bool IsWireframeEnabled() const
-    {
-        return wireframeEnabled_;
-    }
-
-    void ApplyWireframe(bool enabled)
-    {
-        // 记录全局线框状态，并同步到当前页面的所有子控件。
-        wireframeEnabled_ = enabled;
-        SetDebugWireframeRecursive(shared_from_this(), enabled);
-        focusWireframeButton_->SetText(enabled ? "focus/wireframe_on"_i18n : "focus/wireframe_off"_i18n);
-    }
-
-    void Layout() override
-    {
-        // ScrollView 占满整个页面，内部 rootColumn 由 ScrollView 管理滚动内容尺寸。
-        rootColumn_->SetWidth(std::max(kDesignWidth, frame_.width - 48.0F));
-        rootScroll_->SetFrame(frame_);
-        rootScroll_->Layout();
-        needsLayout_ = false;
-    }
-
-protected:
-    void Draw(bk::RenderQueue& queue) const override
-    {
-        // 绘制深色背景和顶部强调线，其他面板由各自控件绘制。
-        queue.PushRect(frame_, bk::ColorRGBA{0.05F, 0.07F, 0.11F, 1.0F});
-        queue.PushRect(
-            bk::Rect{frame_.x, frame_.y, frame_.width, 8.0F},
-            bk::ColorRGBA{0.20F, 0.52F, 0.97F, 1.0F});
-    }
-
-    void Update(float) override
-    {
-        // 每帧刷新状态面板和会被外部开关影响的按钮文案。
-        if (bk::Application* app = bk::Application::Active())
+        if (device_)
         {
-            SyncStatus(*app, app->GetInputState(), app->GetWindowSize());
-            SyncFocusMotionButton();
-            SyncFocusLayerTrailButton();
-            SyncFocusThemeLabel();
+            device_->Resize(size);
         }
+    }
+
+    void Step(
+        const bk::InputState& input,
+        bk::Vector2 logicalSize,
+        float deltaSeconds,
+        const bk::RenderQueue& overlayQueue)
+    {
+        elapsedSeconds_ += deltaSeconds;
+        trail_.Update(input, logicalSize, deltaSeconds);
+        Rasterize(logicalSize);
+        DrawTouchDebugText(input, logicalSize);
+        demo::RenderQueueToImage(image_, demo::GlobalFont(), overlayQueue);
+
+        const bk::TextureDesc textureDesc{
+            static_cast<std::uint32_t>(image_.width),
+            static_cast<std::uint32_t>(image_.height),
+            image_.pixels.data(),
+        };
+        device_->UpdateTexture(texture_, textureDesc);
+
+        device_->BeginFrame(swapchain_, bk::RenderPassDesc{bk::ColorRGBA{0.0F, 0.0F, 0.0F, 1.0F}});
+        device_->BeginCommandBuffer(commandBuffer_);
+        device_->BindPipeline(commandBuffer_, pipeline_);
+        device_->BindVertexBuffer(commandBuffer_, vertexBuffer_);
+        device_->BindTexture(commandBuffer_, texture_);
+        device_->Draw(commandBuffer_, 6);
+        device_->EndCommandBuffer(commandBuffer_);
+        device_->Submit(commandBuffer_);
+        device_->EndFrame(swapchain_);
     }
 
 private:
-    static std::shared_ptr<bk::Label> MakeLabel(const std::string& text, float fontSize, const bk::ColorRGBA& color)
+    bool CreateRenderResources()
     {
-        // 通用标签工厂：统一字号和颜色设置。
-        auto label = std::make_shared<bk::Label>(text);
-        label->SetFontSize(fontSize);
-        label->SetTextColor(color);
-        return label;
-    }
-
-    static std::shared_ptr<bk::VBox> MakePanel(const std::string& name, const bk::ColorRGBA& color)
-    {
-        // 面板统一采用圆角、阴影和内边距，保证整体视觉节奏一致。
-        auto panel = std::make_shared<bk::VBox>();
-        panel->SetName(name);
-        panel->SetDrawBackground(true);
-        panel->SetBackgroundColor(color);
-        panel->SetCornerRadius(1.0F);
-        panel->SetShadowEnabled(true);
-        panel->SetShadowOffset(0.0F, 10.0F);
-        panel->SetShadowBlurRadius(16.0F);
-        panel->SetShadowSpread(2.0F);
-        panel->SetShadowColor(bk::ColorRGBA{0.0F, 0.0F, 0.0F, 0.16F});
-        panel->SetPaddingTop(16.0F);
-        panel->SetPaddingRight(16.0F);
-        panel->SetPaddingBottom(16.0F);
-        panel->SetPaddingLeft(16.0F);
-        panel->SetSpacing(10.0F);
-        return panel;
-    }
-
-    static std::shared_ptr<ActionButton> MakeActionButton(const std::string& title, const std::string& subtitle, const bk::ColorRGBA& color)
-    {
-        // 页面内的按钮统一走这个工厂，保证主文本、副文本和配色一致。
-        auto button = std::make_shared<ActionButton>(title, subtitle);
-        button->SetBackgroundColor(color);
-        button->SetTextColor(bk::ColorRGBA{1.0F, 1.0F, 1.0F, 1.0F});
-        return button;
-    }
-
-    void SetAction(std::string action)
-    {
-        // 把最后一次动作写入状态栏，帮助观察点击路径是否符合预期。
-        statusAction_->SetText("status/action"_i18n(std::move(action)));
-    }
-
-    void ApplyFocusTheme(const std::string& name, const bk::ColorRGBA& color1, const bk::ColorRGBA& color2)
-    {
-        // 切换当前主题名，并同步到每个可聚焦控件自己的聚焦框样式。
-        currentFocusThemeName_ = name;
-        for (const auto& button : FocusStyledButtons())
-        {
-            button->SetFocusHighlightStyle(MakeFocusStyle(color1, color2));
-        }
-        SyncFocusThemeLabel();
-    }
-
-    std::array<std::shared_ptr<ActionButton>, 18> FocusStyledButtons() const
-    {
-        return {
-            navHome_,
-            navGallery_,
-            openModalButton_,
-            focusDefaultButton_,
-            focusLastButton_,
-            focusClearButton_,
-            focusWireframeButton_,
-            focusMotionButton_,
-            focusLayerTrailButton_,
-            focusThemeAuroraButton_,
-            focusThemeSunsetButton_,
-            focusThemeMintButton_,
-            langZhButton_,
-            langEnButton_,
-            cardOverview_,
-            cardMetrics_,
-            cardOpenModal_,
-            cardRestoreFocus_,
+        const std::array<demo::Vertex, 6> quad = demo::MakeFullscreenQuad();
+        const bk::BufferDesc bufferDesc{
+            bk::BufferUsage::Vertex,
+            sizeof(quad),
+            quad.data(),
         };
+        vertexBuffer_ = device_->CreateBuffer(bufferDesc);
+        if (!bk::IsValid(vertexBuffer_))
+        {
+            std::fprintf(stderr, "Failed to create fullscreen vertex buffer.\n");
+            return false;
+        }
+
+        image_ = demo::MakeImage(kSwitchTextureWidth, kSwitchTextureHeight, 0, 0, 0, 255);
+        const bk::TextureDesc textureDesc{
+            static_cast<std::uint32_t>(image_.width),
+            static_cast<std::uint32_t>(image_.height),
+            image_.pixels.data(),
+        };
+        texture_ = device_->CreateTexture(textureDesc);
+        if (!bk::IsValid(texture_))
+        {
+            std::fprintf(stderr, "Failed to create fullscreen texture.\n");
+            return false;
+        }
+
+        vertexShader_ = device_->CreateShader(bk::ShaderDesc{
+            bk::ShaderStage::Vertex,
+            "shaders/deko_triangle_vsh.dksh",
+        });
+        fragmentShader_ = device_->CreateShader(bk::ShaderDesc{
+            bk::ShaderStage::Fragment,
+            "shaders/deko_triangle_fsh.dksh",
+        });
+        if (!bk::IsValid(vertexShader_) || !bk::IsValid(fragmentShader_))
+        {
+            std::fprintf(stderr, "Failed to load deko3d demo shaders.\n");
+            return false;
+        }
+
+        constexpr std::array<bk::VertexAttributeDesc, 3> attributes = {{
+            {0, bk::VertexFormat::Float2, offsetof(demo::Vertex, position)},
+            {1, bk::VertexFormat::Float3, offsetof(demo::Vertex, color)},
+            {2, bk::VertexFormat::Float2, offsetof(demo::Vertex, uv)},
+        }};
+        const bk::VertexLayoutDesc layout{
+            sizeof(demo::Vertex),
+            attributes.data(),
+            attributes.size(),
+        };
+        pipeline_ = device_->CreatePipeline(bk::PipelineDesc{
+            vertexShader_,
+            fragmentShader_,
+            layout,
+            bk::PrimitiveTopology::Triangles,
+        });
+        if (!bk::IsValid(pipeline_))
+        {
+            std::fprintf(stderr, "Failed to create deko3d pipeline.\n");
+            return false;
+        }
+
+        return true;
     }
 
-    void SyncFocusMotionButton()
+    void Rasterize(bk::Vector2 logicalSize)
     {
-        // 按钮标题会根据全局开关切换 on/off，避免用户看不出当前状态。
-        if (bk::Application* app = bk::Application::Active())
+        demo::ClearImage(image_, 0, 0, 0, 255);
+
+        const float aspectX = logicalSize.y > 0.0F ? logicalSize.x / logicalSize.y : (16.0F / 9.0F);
+        constexpr int lineWidth = 1;
+
+        for (int row = 0; row < kGridRows; ++row)
         {
-            const bool enabled = app->IsFocusHighlightMotionEnabled();
-            focusMotionButton_->SetText(enabled ? "focus/motion_on"_i18n : "focus/motion_off"_i18n);
+            const int y0 = row * image_.height / kGridRows;
+            const int y1 = (row + 1) * image_.height / kGridRows;
+            const int innerY = y0 + lineWidth;
+            const int innerHeight = std::max(0, y1 - innerY);
+
+            for (int column = 0; column < kGridColumns; ++column)
+            {
+                const int x0 = column * image_.width / kGridColumns;
+                const int x1 = (column + 1) * image_.width / kGridColumns;
+                const int innerX = x0 + lineWidth;
+                const int innerWidth = std::max(0, x1 - innerX);
+                if (innerWidth <= 0 || innerHeight <= 0)
+                {
+                    continue;
+                }
+
+                const float centerU = (static_cast<float>(column) + 0.5F) / static_cast<float>(kGridColumns);
+                const float centerV = (static_cast<float>(row) + 0.5F) / static_cast<float>(kGridRows);
+                const Float3 tint = RegionColor(static_cast<float>(column), static_cast<float>(row));
+                const float pulseGlow = ComputePulseGlow(centerU, centerV, aspectX, trail_.Pulses());
+                const float cellNoise = 0.96F +
+                    0.04F * std::sin(static_cast<float>(column) * 0.8F + static_cast<float>(row) * 1.3F + elapsedSeconds_ * 3.5F);
+                const Float3 color = ToneMap(Scale(tint, pulseGlow * 1.45F * cellNoise));
+
+                if (color.r <= 0.001F && color.g <= 0.001F && color.b <= 0.001F)
+                {
+                    continue;
+                }
+
+                demo::FillRect(
+                    image_,
+                    innerX,
+                    innerY,
+                    innerWidth,
+                    innerHeight,
+                    demo::ToByte(color.r),
+                    demo::ToByte(color.g),
+                    demo::ToByte(color.b),
+                    255);
+            }
+        }
+
+        for (int column = 0; column <= kGridColumns; ++column)
+        {
+            const int x = std::min(image_.width - 1, column * image_.width / kGridColumns);
+            demo::FillRect(image_, x, 0, lineWidth, image_.height, 255, 255, 255, 255);
+        }
+
+        for (int row = 0; row <= kGridRows; ++row)
+        {
+            const int y = std::min(image_.height - 1, row * image_.height / kGridRows);
+            demo::FillRect(image_, 0, y, image_.width, lineWidth, 255, 255, 255, 255);
         }
     }
 
-    void SyncFocusLayerTrailButton()
+    void DrawTouchDebugText(const bk::InputState& input, bk::Vector2 logicalSize)
     {
-        // 同步“保留非激活焦点高亮”开关的按钮文案。
-        if (bk::Application* app = bk::Application::Active())
-        {
-            const bool enabled = app->IsPreservingInactiveFocusHighlights();
-            focusLayerTrailButton_->SetText(enabled ? "focus/trail_on"_i18n : "focus/trail_off"_i18n);
-        }
+        demo::FillRect(image_, 0, 0, 640, 220, 0, 0, 0, 180);
+        const std::string text = BuildTouchDebugText(input, logicalSize);
+        DrawMultilineText(image_, text, 12, 12, 22.0F, 255, 255, 255);
     }
 
-    void SyncFocusThemeLabel()
-    {
-        // 主题标签显示当前焦点高亮主题名。
-        focusThemeLabel_->SetText("focus/theme_label"_i18n(currentFocusThemeName_));
-    }
-
-    void RefreshTexts()
-    {
-        // 切换语言后，重新把所有静态文案刷一遍。
-        headerTitle_->SetText("page/title"_i18n);
-        headerSubtitle_->SetText("page/subtitle"_i18n);
-        headerHint_->SetText("page/hint"_i18n);
-        navTitle_->SetText("nav/title"_i18n);
-        navTip_->SetText("nav/tip"_i18n);
-        navHome_->SetText("nav/home"_i18n);
-        navGallery_->SetText("nav/gallery"_i18n);
-        openModalButton_->SetText("nav/open_modal"_i18n);
-        focusTitle_->SetText("focus/title"_i18n);
-        focusTip_->SetText("focus/tip"_i18n);
-        focusDefaultButton_->SetText("focus/go_default"_i18n);
-        focusLastButton_->SetText("focus/go_last"_i18n);
-        focusClearButton_->SetText("focus/clear"_i18n);
-        focusThemeAuroraButton_->SetText("focus/theme_aurora"_i18n);
-        focusThemeSunsetButton_->SetText("focus/theme_sunset"_i18n);
-        focusThemeMintButton_->SetText("focus/theme_mint"_i18n);
-        SyncFocusThemeLabel();
-        SyncFocusMotionButton();
-        SyncFocusLayerTrailButton();
-        ApplyWireframe(wireframeEnabled_);
-        statusTitle_->SetText("status/title"_i18n);
-        statusKey_->SetText("status/key_idle"_i18n);
-        statusAction_->SetText("status/action_ready"_i18n);
-        treeTitle_->SetText("tree/title"_i18n);
-        treeSubtitle_->SetText("tree/subtitle"_i18n);
-        treeSizeLabel_->SetText("Action Panel Scale");
-        actionTitle_->SetText("action/title"_i18n);
-        actionSubtitle_->SetText("action/subtitle"_i18n);
-        cardOverview_->SetText("action/overview"_i18n);
-        cardMetrics_->SetText("action/metrics"_i18n);
-        cardOpenModal_->SetText("action/open_modal"_i18n);
-        cardRestoreFocus_->SetText("action/restore_focus"_i18n);
-        langTitle_->SetText("lang/title"_i18n);
-        langHint_->SetText("lang/hint"_i18n);
-        langZhButton_->SetText("lang/zh"_i18n);
-        langEnButton_->SetText("lang/en"_i18n);
-    }
-
-    void BindCallbacks()
-    {
-        // 把页面中所有按钮的“点击后做什么”集中放在这里，便于一眼查看交互逻辑。
-        navHome_->SetCallback([this](ActionButton&) {
-            SetAction("Home clicked");
-        });
-        navGallery_->SetCallback([this](ActionButton&) {
-            SetAction("Gallery clicked");
-        });
-        openModalButton_->SetCallback([this](ActionButton&) {
-            SetAction("Open detail view");
-            openModalRequested_ = true;
-        });
-
-        focusDefaultButton_->SetCallback([this](ActionButton&) {
-            SetAction("Request default focus");
-            RequestDefaultFocus();
-        });
-        focusLastButton_->SetCallback([this](ActionButton&) {
-            SetAction("Request last focus");
-            RequestLastFocus();
-        });
-        focusClearButton_->SetCallback([this](ActionButton&) {
-            SetAction("Clear current focus");
-            ClearCurrentFocus();
-        });
-        focusWireframeButton_->SetCallback([this](ActionButton&) {
-            ApplyWireframe(!wireframeEnabled_);
-            SetAction(wireframeEnabled_ ? "Wireframe enabled" : "Wireframe disabled");
-        });
-        focusMotionButton_->SetCallback([this](ActionButton&) {
-            if (bk::Application* app = bk::Application::Active())
-            {
-                const bool enabled = !app->IsFocusHighlightMotionEnabled();
-                app->SetFocusHighlightMotionEnabled(enabled);
-                SyncFocusMotionButton();
-                SetAction(enabled ? "Focus motion enabled" : "Focus motion disabled");
-            }
-        });
-        focusLayerTrailButton_->SetCallback([this](ActionButton&) {
-            if (bk::Application* app = bk::Application::Active())
-            {
-                const bool enabled = !app->IsPreservingInactiveFocusHighlights();
-                app->SetPreserveInactiveFocusHighlights(enabled);
-                SyncFocusLayerTrailButton();
-                SetAction(enabled ? "Layer focus trail enabled" : "Layer focus trail disabled");
-            }
-        });
-        focusThemeAuroraButton_->SetCallback([this](ActionButton&) {
-            ApplyFocusTheme(
-                "Aurora",
-                bk::ColorRGBA{0.34F, 0.76F, 1.0F, 1.0F},
-                bk::ColorRGBA{0.76F, 0.52F, 1.0F, 1.0F});
-            SetAction("Focus theme switched to Aurora");
-        });
-        focusThemeSunsetButton_->SetCallback([this](ActionButton&) {
-            ApplyFocusTheme(
-                "Sunset",
-                bk::ColorRGBA{1.0F, 0.72F, 0.34F, 1.0F},
-                bk::ColorRGBA{1.0F, 0.36F, 0.56F, 1.0F});
-            SetAction("Focus theme switched to Sunset");
-        });
-        focusThemeMintButton_->SetCallback([this](ActionButton&) {
-            ApplyFocusTheme(
-                "Mint",
-                bk::ColorRGBA{0.42F, 1.0F, 0.86F, 1.0F},
-                bk::ColorRGBA{0.20F, 0.66F, 1.0F, 1.0F});
-            SetAction("Focus theme switched to Mint");
-        });
-
-        langZhButton_->SetCallback([this](ActionButton&) {
-            bk::I18n::Instance().SetLanguage("zh-CN");
-            RefreshTexts();
-            SetAction("Language switched to Simplified Chinese");
-        });
-        langEnButton_->SetCallback([this](ActionButton&) {
-            bk::I18n::Instance().SetLanguage("en");
-            RefreshTexts();
-            SetAction("Language switched to English");
-        });
-
-        cardOverview_->SetCallback([this](ActionButton&) {
-            SetAction("Overview clicked");
-        });
-        cardMetrics_->SetCallback([this](ActionButton&) {
-            SetAction("Metrics clicked");
-        });
-        cardOpenModal_->SetCallback([this](ActionButton&) {
-            SetAction("Open detail view from content");
-            openModalRequested_ = true;
-        });
-        cardRestoreFocus_->SetCallback([this](ActionButton&) {
-            SetAction("Restore last focus");
-            RequestLastFocus();
-        });
-
-        navHome_->SetCornerRadius(1.0F);
-        navHome_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.22F, 0.49F, 0.93F, 1.0F}, bk::ColorRGBA{0.40F, 0.68F, 1.0F, 1.0F}));
-        navGallery_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.20F, 0.64F, 0.55F, 1.0F}, bk::ColorRGBA{0.48F, 0.88F, 0.70F, 1.0F}));
-        openModalButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.79F, 0.45F, 0.26F, 1.0F}, bk::ColorRGBA{0.96F, 0.66F, 0.40F, 1.0F}));
-        focusDefaultButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F}, bk::ColorRGBA{0.62F, 0.76F, 1.0F, 1.0F}));
-        focusLastButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F}, bk::ColorRGBA{0.49F, 0.88F, 0.70F, 1.0F}));
-        focusClearButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.72F, 0.34F, 0.39F, 1.0F}, bk::ColorRGBA{0.96F, 0.58F, 0.63F, 1.0F}));
-        focusWireframeButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.43F, 0.40F, 0.86F, 1.0F}, bk::ColorRGBA{0.69F, 0.66F, 1.0F, 1.0F}));
-        focusMotionButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.86F, 0.36F, 0.72F, 1.0F}, bk::ColorRGBA{0.99F, 0.56F, 0.88F, 1.0F}));
-        focusLayerTrailButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.34F, 0.62F, 0.88F, 1.0F}, bk::ColorRGBA{0.58F, 0.82F, 1.0F, 1.0F}));
-        focusThemeAuroraButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.24F, 0.52F, 0.95F, 1.0F}, bk::ColorRGBA{0.63F, 0.78F, 1.0F, 1.0F}));
-        focusThemeSunsetButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.92F, 0.46F, 0.34F, 1.0F}, bk::ColorRGBA{1.0F, 0.66F, 0.52F, 1.0F}));
-        focusThemeMintButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.22F, 0.72F, 0.64F, 1.0F}, bk::ColorRGBA{0.50F, 0.94F, 0.83F, 1.0F}));
-        langZhButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F}, bk::ColorRGBA{0.62F, 0.76F, 1.0F, 1.0F}));
-        langEnButton_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F}, bk::ColorRGBA{0.49F, 0.88F, 0.70F, 1.0F}));
-        cardOverview_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.23F, 0.50F, 0.95F, 1.0F}, bk::ColorRGBA{0.62F, 0.76F, 1.0F, 1.0F}));
-        cardMetrics_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.20F, 0.68F, 0.52F, 1.0F}, bk::ColorRGBA{0.49F, 0.88F, 0.70F, 1.0F}));
-        cardOpenModal_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.79F, 0.45F, 0.26F, 1.0F}, bk::ColorRGBA{0.96F, 0.66F, 0.40F, 1.0F}));
-        cardRestoreFocus_->SetFocusHighlightStyle(MakeFocusStyle(bk::ColorRGBA{0.44F, 0.41F, 0.86F, 1.0F}, bk::ColorRGBA{0.70F, 0.67F, 1.0F, 1.0F}));
-    }
-
-    void BuildNavigation()
-    {
-        // 明确指定每个按钮在上下左右方向上的邻居，形成可预测的焦点图。
-        navHome_->SetNavigationTarget(bk::NavigationDirection::Down, navGallery_);
-        navGallery_->SetNavigationTarget(bk::NavigationDirection::Up, navHome_);
-        navGallery_->SetNavigationTarget(bk::NavigationDirection::Down, openModalButton_);
-        openModalButton_->SetNavigationTarget(bk::NavigationDirection::Up, navGallery_);
-        openModalButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusDefaultButton_);
-        openModalButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardOverview_);
-
-        focusDefaultButton_->SetNavigationTarget(bk::NavigationDirection::Up, openModalButton_);
-        focusDefaultButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusLastButton_);
-        focusDefaultButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardOverview_);
-        focusLastButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusDefaultButton_);
-        focusLastButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusClearButton_);
-        focusLastButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardMetrics_);
-        focusClearButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusLastButton_);
-        focusClearButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusWireframeButton_);
-        focusClearButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardOpenModal_);
-        focusWireframeButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusClearButton_);
-        focusWireframeButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusMotionButton_);
-        focusWireframeButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
-        focusMotionButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusWireframeButton_);
-        focusMotionButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusLayerTrailButton_);
-        focusMotionButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
-        focusLayerTrailButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusMotionButton_);
-        focusLayerTrailButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusThemeAuroraButton_);
-        focusLayerTrailButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
-        focusThemeAuroraButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusLayerTrailButton_);
-        focusThemeAuroraButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusThemeSunsetButton_);
-        focusThemeAuroraButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
-        focusThemeSunsetButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusThemeAuroraButton_);
-        focusThemeSunsetButton_->SetNavigationTarget(bk::NavigationDirection::Down, focusThemeMintButton_);
-        focusThemeSunsetButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
-        focusThemeMintButton_->SetNavigationTarget(bk::NavigationDirection::Up, focusThemeSunsetButton_);
-        focusThemeMintButton_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
-
-        cardOverview_->SetNavigationTarget(bk::NavigationDirection::Left, focusDefaultButton_);
-        cardOverview_->SetNavigationTarget(bk::NavigationDirection::Right, cardMetrics_);
-        cardOverview_->SetNavigationTarget(bk::NavigationDirection::Down, cardOpenModal_);
-        cardMetrics_->SetNavigationTarget(bk::NavigationDirection::Left, cardOverview_);
-        cardMetrics_->SetNavigationTarget(bk::NavigationDirection::Down, cardRestoreFocus_);
-        cardMetrics_->SetNavigationTarget(bk::NavigationDirection::Right, focusLastButton_);
-        cardOpenModal_->SetNavigationTarget(bk::NavigationDirection::Up, cardOverview_);
-        cardOpenModal_->SetNavigationTarget(bk::NavigationDirection::Left, focusClearButton_);
-        cardOpenModal_->SetNavigationTarget(bk::NavigationDirection::Right, cardRestoreFocus_);
-        cardRestoreFocus_->SetNavigationTarget(bk::NavigationDirection::Up, cardMetrics_);
-        cardRestoreFocus_->SetNavigationTarget(bk::NavigationDirection::Left, cardOpenModal_);
-        cardRestoreFocus_->SetNavigationTarget(bk::NavigationDirection::Right, focusMotionButton_);
-    }
-
-    std::shared_ptr<bk::VBox> rootColumn_;
-    std::shared_ptr<bk::ScrollView> rootScroll_;
-    std::shared_ptr<bk::HBox> headerBar_;
-    std::shared_ptr<bk::VBox> headerText_;
-    std::shared_ptr<bk::Label> headerTitle_;
-    std::shared_ptr<bk::Label> headerSubtitle_;
-    std::shared_ptr<bk::Label> headerHint_;
-    std::shared_ptr<bk::HBox> bodyRow_;
-    std::shared_ptr<bk::VBox> leftColumn_;
-    std::shared_ptr<bk::VBox> navPanel_;
-    std::shared_ptr<bk::Label> navTitle_;
-    std::shared_ptr<bk::Label> navTip_;
-    std::shared_ptr<ActionButton> navHome_;
-    std::shared_ptr<ActionButton> navGallery_;
-    std::shared_ptr<ActionButton> openModalButton_;
-    std::shared_ptr<bk::VBox> focusPanel_;
-    std::shared_ptr<bk::Label> focusTitle_;
-    std::shared_ptr<bk::Label> focusTip_;
-    std::shared_ptr<ActionButton> focusDefaultButton_;
-    std::shared_ptr<ActionButton> focusLastButton_;
-    std::shared_ptr<ActionButton> focusClearButton_;
-    std::shared_ptr<ActionButton> focusWireframeButton_;
-    std::shared_ptr<ActionButton> focusMotionButton_;
-    std::shared_ptr<ActionButton> focusLayerTrailButton_;
-    std::shared_ptr<bk::Label> focusThemeLabel_;
-    std::shared_ptr<ActionButton> focusThemeAuroraButton_;
-    std::shared_ptr<ActionButton> focusThemeSunsetButton_;
-    std::shared_ptr<ActionButton> focusThemeMintButton_;
-    std::shared_ptr<bk::VBox> langPanel_;
-    std::shared_ptr<bk::Label> langTitle_;
-    std::shared_ptr<bk::Label> langHint_;
-    std::shared_ptr<ActionButton> langZhButton_;
-    std::shared_ptr<ActionButton> langEnButton_;
-    std::shared_ptr<bk::VBox> rightColumn_;
-    std::shared_ptr<bk::VBox> statusPanel_;
-    std::shared_ptr<bk::VBox> treeSizePanel_;
-    std::shared_ptr<bk::Label> treeSizeLabel_;
-    std::shared_ptr<bk::Label> treeSizeValueLabel_;
-    std::shared_ptr<SizeScrollbar> treeSizeScrollbar_;
-    std::shared_ptr<bk::Label> statusTitle_;
-    std::shared_ptr<bk::Label> statusFocus_;
-    std::shared_ptr<bk::Label> statusDefault_;
-    std::shared_ptr<bk::Label> statusLast_;
-    std::shared_ptr<bk::Label> statusPointer_;
-    std::shared_ptr<bk::Label> statusKey_;
-    std::shared_ptr<bk::Label> statusAction_;
-    std::shared_ptr<bk::Label> statusModal_;
-    std::shared_ptr<bk::HBox> lowerRow_;
-    std::shared_ptr<bk::VBox> treePanel_;
-    std::shared_ptr<bk::Label> treeTitle_;
-    std::shared_ptr<bk::Label> treeSubtitle_;
-    std::vector<std::shared_ptr<bk::Label>> treeLines_;
-    std::shared_ptr<bk::VBox> actionPanel_;
-    std::shared_ptr<bk::Label> actionTitle_;
-    std::shared_ptr<bk::Label> actionSubtitle_;
-    std::shared_ptr<bk::HBox> actionRowTop_;
-    std::shared_ptr<bk::HBox> actionRowBottom_;
-    std::shared_ptr<ActionButton> cardOverview_;
-    std::shared_ptr<ActionButton> cardMetrics_;
-    std::shared_ptr<ActionButton> cardOpenModal_;
-    std::shared_ptr<ActionButton> cardRestoreFocus_;
-    std::string currentFocusThemeName_{"Aurora"};
-    float actionPanelScale_ = 1.0F;
-    bool openModalRequested_ = false;
-    bool wireframeEnabled_ = false;
-
-    static constexpr float kActionPanelMinScale = 0.75F;
-    static constexpr float kActionPanelMaxScale = 1.45F;
+    bk::Platform& platform_;
+    std::unique_ptr<bk::Device> device_{};
+    bk::SwapchainHandle swapchain_{};
+    bk::CommandBufferHandle commandBuffer_{};
+    bk::BufferHandle vertexBuffer_{};
+    bk::TextureHandle texture_{};
+    bk::ShaderHandle vertexShader_{};
+    bk::ShaderHandle fragmentShader_{};
+    bk::PipelineHandle pipeline_{};
+    demo::Image image_{};
+    PulseTrailState trail_{};
+    float elapsedSeconds_ = 0.0F;
 };
-
+#endif
 }
 
 int main(int argc, char** argv)
 {
     try
     {
-        // Host 负责窗口、平台和 Application 的创建与驱动。
-        bk::ApplicationHost host;
+        bk::Application app;
         bk::ApplicationDesc appDesc;
-        appDesc.window.title = "BeikUI Focus Demo";
+        appDesc.window.title = "BeikUI Neon Grid Demo";
         appDesc.window.width = static_cast<int>(kDesignWidth);
         appDesc.window.height = static_cast<int>(kDesignHeight);
         appDesc.logicalSize = bk::Vector2{kDesignWidth, kDesignHeight};
-        appDesc.clearColor = bk::ColorRGBA{0.03F, 0.04F, 0.08F, 1.0F};
-        appDesc.name = "BeikUI Focus Demo";
-        appDesc.version = "0.3.0";
-        appDesc.identifier = "bkui.demo.focus_view";
-        appDesc.logger.level = bk::LogLevel::Debug;
+        appDesc.clearColor = bk::ColorRGBA{0.0F, 0.0F, 0.0F, 1.0F};
+        appDesc.name = "BeikUI Neon Grid Demo";
+        appDesc.version = "0.1.0";
+        appDesc.identifier = "bkui.demo.neon_grid";
+        appDesc.logger.level = bk::LogLevel::Info;
         appDesc.logger.enableConsole = true;
         appDesc.logger.enableColor =
 #if defined(BKUI_PLATFORM_SWITCH)
@@ -1288,88 +1310,91 @@ int main(int argc, char** argv)
 #else
             true;
 #endif
-        appDesc.logger.flushEachMessage =
-#if defined(BKUI_PLATFORM_SWITCH)
-            true;
-#else
-            false;
-#endif
-        appDesc.logger.filePath = "bkui_focus_demo.log";
 
-        if (!host.Initialize(appDesc, argc, argv))
+        if (!app.Initialize(appDesc, argc, argv))
         {
-            std::fprintf(stderr, "Failed to initialize demo host.\n");
+            std::fprintf(stderr, "Failed to initialize application.\n");
             return 1;
         }
+        bklog.info("Neon grid demo booting.");
 
-        bk::Application::instance().SetPreserveInactiveFocusHighlights(true);
-        bklog.info("bkui_demo: application initialized");
+        std::unique_ptr<bk::Platform> platform = bk::CreateDefaultPlatform(appDesc.window);
+        if (!platform || !platform->Init())
+        {
+            std::fprintf(stderr, "Failed to initialize platform.\n");
+            app.Shutdown();
+            return 1;
+        }
+        bklog.info("Platform initialized.");
 
-        // 主页面是常驻层，先加入 Application，并请求默认焦点。
-        auto page = std::make_shared<DemoPage>();
-        bk::Application::instance().AddView(page);
-        page->RequestDefaultFocus();
+        app.SetWindowSize(platform->GetWindowSize());
+        app.SetLogOverlayVisible(true);
+#if defined(BKUI_PLATFORM_SWITCH)
+        SwitchNeonGridDemo demo(*platform);
+        if (!demo.Initialize())
+        {
+            std::fprintf(stderr, "Failed to initialize Switch neon grid demo.\n");
+            platform->Shutdown();
+            app.Shutdown();
+            return 1;
+        }
+        bklog.info("Switch neon grid renderer initialized.");
+#else
+        OpenGLNeonGridDemo demo(*platform);
+        if (!demo.Initialize())
+        {
+            std::fprintf(stderr, "Failed to initialize OpenGL neon grid demo.\n");
+            platform->Shutdown();
+            app.Shutdown();
+            return 1;
+        }
+        bklog.info("OpenGL neon grid renderer initialized.");
+#endif
 
-        std::shared_ptr<DemoModalView> modal;
-
-        // 帧尾统一处理“创建模态框”和“关闭模态框”，避免在回调中直接改 View 集合。
-        host.OnFrameEnd().Connect([&](bk::ApplicationHost&, float, std::uint64_t) {
-            if (!modal && page->ConsumeOpenModalRequest())
+        bklog.info("Neon grid demo entering main loop.");
+        auto previousTime = std::chrono::steady_clock::now();
+        while (platform->IsRunning() && app.IsRunning())
+        {
+            platform->PollEvents();
+            const bk::InputState platformInput = platform->GetInput();
+            if (platformInput.quitRequested)
             {
-                // 只有在页面确实请求时才创建模态层。
-                modal = std::make_shared<DemoModalView>();
-                modal->ApplyWireframe(page->IsWireframeEnabled());
-                bk::Application::instance().AddView(modal);
-                modal->RequestDefaultFocus();
+                app.RequestQuit();
             }
 
-            if (modal && modal->ConsumeCloseRequested())
+#if defined(BKUI_PLATFORM_SWITCH)
+            if (platformInput.windowResized)
             {
-                // 关闭前先清理焦点，再从 Application 中移除模态层。
-                modal->ClearCurrentFocus();
-                bk::Application::instance().RemoveView(modal);
-                modal.reset();
-                page->RequestLastFocus();
+                const bk::Vector2 windowSize = platform->GetWindowSize();
+                app.SetWindowSize(windowSize);
+                demo.Resize(windowSize);
             }
-        });
+#endif
 
-        // 主循环采用固定 60 FPS，确保演示中的焦点状态和动画节奏稳定。
-        bk::MainLoopDesc loopDesc;
-        loopDesc.fixedDeltaSeconds = 1.0F / 60.0F;
-        loopDesc.useFixedDelta = true;
-        loopDesc.synchronizeToFixedDelta = true;
+            app.SetInputState(platformInput);
+            if (!app.IsRunning())
+            {
+                break;
+            }
 
+            const auto now = std::chrono::steady_clock::now();
+            const float deltaSeconds = std::chrono::duration<float>(now - previousTime).count();
+            previousTime = now;
 
+            if (!app.RunFrame(deltaSeconds, true))
+            {
+                break;
+            }
 
-
-
-        // 主循环
-        const std::uint64_t executedFrames = host.MainLoop(loopDesc);
-
-
-
-
-
-
-
-
-        // 根据退出原因写不同日志，方便排查平台关闭还是应用主动退出。
-        if (bk::Application::instance().QuitRequested())
-        {
-            bklog.info("bkui_demo: loop ended because application requested quit");
+            demo.Step(app.GetInputState(), app.GetLogicalSize(), deltaSeconds, app.GetRenderQueue());
         }
-        else if (const bk::Platform* platform = host.GetPlatform(); platform != nullptr && !platform->IsRunning())
-        {
-            bklog.warn("bkui_demo: loop ended because platform is no longer running");
-        }
-        else
-        {
-            bklog.warn("bkui_demo: loop ended unexpectedly");
-        }
-        bklog.info("bkui_demo: executed frames = " + std::to_string(executedFrames));
 
-        //关闭文件系统和平台Host。
-        host.Shutdown();
+        bklog.info("Neon grid demo main loop exited.");
+        demo.Shutdown();
+        bklog.info("Neon grid demo renderer shutdown complete.");
+        platform->Shutdown();
+        bklog.info("Platform shutdown complete.");
+        app.Shutdown();
     }
     catch (const std::exception& ex)
     {
