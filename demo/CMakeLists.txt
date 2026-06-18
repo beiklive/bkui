@@ -1,4 +1,8 @@
-add_executable(bkui_demo src/main.cpp)
+if(APPLE AND BKUI_PLATFORM_MACOS)
+    add_executable(bkui_demo MACOSX_BUNDLE src/main.cpp)
+else()
+    add_executable(bkui_demo src/main.cpp)
+endif()
 
 foreach(target bkui_demo)
     target_link_libraries(${target} PRIVATE BeikUI::bkui)
@@ -15,6 +19,27 @@ set_target_properties(
     PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${BKUI_RUNTIME_OUTPUT_DIR}"
 )
+
+if(APPLE AND BKUI_PLATFORM_MACOS)
+    set(BKUI_DEMO_MACOS_BUNDLE_DIR "${CMAKE_BINARY_DIR}/bin")
+    set(BKUI_DEMO_MACOS_BUNDLE_RESOURCES_DIR "$<TARGET_BUNDLE_CONTENT_DIR:bkui_demo>/Resources")
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
+        @ONLY
+    )
+
+    set_target_properties(
+        bkui_demo
+        PROPERTIES
+            BUNDLE_OUTPUT_DIRECTORY "${BKUI_DEMO_MACOS_BUNDLE_DIR}"
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
+            MACOSX_BUNDLE_BUNDLE_NAME "BeikUI Demo"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "com.beiklive.bkui.demo"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.0"
+    )
+endif()
 
 if(BKUI_PLATFORM_SWITCH)
     # ── 构建变量：输出路径和资源目录 ──
@@ -85,15 +110,27 @@ else()
     )
 
     # ── 每次构建时复制资源到可执行文件旁，资源变更时自动触发重新复制 ──
-    add_custom_target(
-        bkui_demo.resources
-        ALL
-        DEPENDS ${BKUI_DEMO_RESOURCES}
-        COMMAND "${CMAKE_COMMAND}" -E remove_directory "$<TARGET_FILE_DIR:bkui_demo>/resources"
-        COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/resources" "$<TARGET_FILE_DIR:bkui_demo>/resources"
-        COMMENT "Copying demo resources next to the executable"
-        VERBATIM
-    )
+    if(APPLE AND BKUI_PLATFORM_MACOS)
+        add_custom_target(
+            bkui_demo.resources
+            ALL
+            DEPENDS ${BKUI_DEMO_RESOURCES}
+            COMMAND "${CMAKE_COMMAND}" -E remove_directory "${BKUI_DEMO_MACOS_BUNDLE_RESOURCES_DIR}"
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/resources" "${BKUI_DEMO_MACOS_BUNDLE_RESOURCES_DIR}"
+            COMMENT "Copying demo resources into bkui_demo.app bundle"
+            VERBATIM
+        )
+    else()
+        add_custom_target(
+            bkui_demo.resources
+            ALL
+            DEPENDS ${BKUI_DEMO_RESOURCES}
+            COMMAND "${CMAKE_COMMAND}" -E remove_directory "$<TARGET_FILE_DIR:bkui_demo>/resources"
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/resources" "$<TARGET_FILE_DIR:bkui_demo>/resources"
+            COMMENT "Copying demo resources next to the executable"
+            VERBATIM
+        )
+    endif()
 
     # bkui_demo 启动前确保资源已复制
     add_dependencies(bkui_demo bkui_demo.resources)

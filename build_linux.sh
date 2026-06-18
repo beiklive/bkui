@@ -10,17 +10,17 @@ else
   GENERATOR="Unix Makefiles"
 fi
 
-if [ -f build/mac/CMakeCache.txt ] && ! grep -q "CMAKE_GENERATOR:INTERNAL=$GENERATOR" build/mac/CMakeCache.txt; then
-  rm -rf build/mac
+if [ -f build/linux/CMakeCache.txt ] && ! grep -q "CMAKE_GENERATOR:INTERNAL=$GENERATOR" build/linux/CMakeCache.txt; then
+  rm -rf build/linux
 fi
 
-cmake -S . -B build/mac -G "$GENERATOR" \
+cmake -S . -B build/linux -G "$GENERATOR" \
   -DCMAKE_BUILD_TYPE=Release \
   -DBKUI_PLATFORM_SWITCH=OFF \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DBKUI_SHARED=OFF
 
-cmake --build build/mac --parallel
+cmake --build build/linux --parallel
 
 build_end_epoch=$(date +%s)
 build_end_text=$(date "+%Y-%m-%d %H:%M:%S")
@@ -32,15 +32,13 @@ printf "  End:     %s\n" "$build_end_text"
 printf "  Elapsed: %02d:%02d\n" $((elapsed / 60)) $((elapsed % 60))
 
 shopt -s nullglob
-artifacts=(build/mac/bin/*)
+artifacts=(build/linux/bin/*)
 if [ ${#artifacts[@]} -eq 0 ]; then
-  printf "  No artifacts found in build/mac/bin\n"
+  printf "  No artifacts found in build/linux/bin\n"
 else
   for path in "${artifacts[@]}"; do
-    if [ -d "$path" ] && [[ "$path" == *.app ]]; then
-      printf "  %s (macOS app bundle)\n" "$path"
-    elif [ -f "$path" ] && [ -x "$path" ]; then
-      bytes=$(stat -f %z "$path")
+    if [ -f "$path" ] && [ -x "$path" ]; then
+      bytes=$(stat -c %s "$path")
       mib=$(awk "BEGIN { printf \"%.2f\", $bytes / 1048576 }")
       printf "  %s: %s bytes (%s MiB)\n" "$path" "$bytes" "$mib"
     fi

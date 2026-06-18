@@ -1,6 +1,7 @@
 #include <bkui/core/FileSystem.hpp>
 
 #include <cstddef>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
@@ -14,6 +15,11 @@ namespace bk
 namespace
 {
 bool g_initialized = false;
+
+std::string NormalizePathString(const std::filesystem::path& path)
+{
+    return path.generic_string();
+}
 }
 
 bool FileSystem::Init(const char* argv0)
@@ -46,6 +52,13 @@ std::string FileSystem::DefaultResourceRoot()
 {
 #if defined(BKUI_PLATFORM_SWITCH)
     return "romfs:/";
+#elif defined(BKUI_PLATFORM_MACOS)
+    const std::filesystem::path bundleResources = std::filesystem::path("..") / "Resources" / "resources";
+    if (std::filesystem::exists(bundleResources))
+    {
+        return NormalizePathString(bundleResources);
+    }
+    return "resources";
 #else
     return "resources";
 #endif
@@ -105,6 +118,13 @@ std::string FileSystem::ResolvePath(const std::string& path)
 {
 #if defined(BKUI_PLATFORM_SWITCH)
     return "romfs:/" + path;
+#elif defined(BKUI_PLATFORM_MACOS)
+    const std::filesystem::path bundleResources = std::filesystem::path("..") / "Resources" / "resources";
+    if (std::filesystem::exists(bundleResources))
+    {
+        return NormalizePathString(bundleResources / path);
+    }
+    return "resources/" + path;
 #else
     return "resources/" + path;
 #endif
